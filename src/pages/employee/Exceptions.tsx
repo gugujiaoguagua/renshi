@@ -1,201 +1,163 @@
 import { useState } from 'react';
 import { clsx } from 'clsx';
-import { AlertCircle, CheckSquare, Clock } from 'lucide-react';
 
-type TabKey = 'pending' | 'processing' | 'rejected' | 'done';
+const exceptionTabs = {
+  pending: {
+    label: '待处理',
+    records: [
+      {
+        title: '下班缺卡',
+        date: '2024-05-19 周日',
+        dotTone: 'bg-red-500',
+        badge: '逾期扣薪风险',
+        badgeTone: 'bg-red-50 text-red-700',
+        lines: ['班次：周末班 · 09:00 - 18:00', '原因：系统未检测到您的下班打卡记录。', '处理时限：需在今晚 20:00 前补充说明，避免影响计薪。'],
+        steps: ['补卡说明', '主管审批', '同步月报'],
+        actions: [
+          { label: '提交补卡', className: 'bg-blue-50 text-blue-600 hover:bg-blue-100' },
+          { label: '查看规则', className: 'border border-gray-200 text-gray-600 hover:bg-gray-50' },
+        ],
+      },
+    ],
+  },
+  processing: {
+    label: '审批中',
+    records: [
+      {
+        title: '迟到补卡申请',
+        date: '2024-05-17 周五',
+        dotTone: 'bg-yellow-400',
+        badge: '主管审批中',
+        badgeTone: 'bg-yellow-50 text-yellow-700',
+        lines: ['说明：早上开会忘记打卡，已跟主管报备。', '当前处理人：张建国（主管）', '预计反馈：今天 18:00 前给出处理结果。'],
+        steps: ['已提交', '审批中', '待回写'],
+        actions: [
+          { label: '查看进度', className: 'border border-gray-200 text-gray-600 hover:bg-gray-50' },
+          { label: '撤销申请', className: 'border border-gray-200 text-gray-600 hover:bg-gray-50' },
+        ],
+      },
+    ],
+  },
+  rejected: {
+    label: '已驳回',
+    records: [
+      {
+        title: '4 月 24 日外勤说明',
+        date: '2024-04-24 周三',
+        dotTone: 'bg-red-500',
+        badge: '待补资料',
+        badgeTone: 'bg-red-50 text-red-700',
+        lines: ['驳回原因：未补充客户名称和现场地点说明。', '处理建议：补充业务说明后重新提交，不需要再新建一条异常。', '影响范围：当前不会计入有效外勤，月底前处理即可恢复月报口径。'],
+        steps: ['补充业务说明', '重新提交', '重新进入审批'],
+        actions: [
+          { label: '补充说明后重提', className: 'bg-blue-50 text-blue-600 hover:bg-blue-100' },
+          { label: '查看驳回原因', className: 'border border-gray-200 text-gray-600 hover:bg-gray-50' },
+        ],
+      },
+    ],
+  },
+  done: {
+    label: '已完成',
+    records: [
+      {
+        title: '4 月 14 日出差申请',
+        date: '2024-04-14 周日',
+        dotTone: 'bg-emerald-500',
+        badge: '已回写月报',
+        badgeTone: 'bg-emerald-50 text-emerald-700',
+        lines: ['结果：主管已通过出差申请，打卡结果按出差口径处理。', '同步状态：日报、异常中心和月报结果已一致。', '留痕说明：本条会继续保留在最近 30 天记录里，方便月底复核。'],
+        steps: ['审批通过', '结果回写', '月底可复核'],
+        actions: [
+          { label: '查看结果明细', className: 'border border-gray-200 text-gray-600 hover:bg-gray-50' },
+        ],
+      },
+    ],
+  },
+} as const;
 
-type ExceptionItem = {
-  title: string;
-  date: string;
-  detail: string;
-  status: string;
-  badge: string;
-  badgeTone: string;
-  actionPrimary: string;
-  actionSecondary?: string;
-};
+type ExceptionTabKey = keyof typeof exceptionTabs;
 
-const tabs: { key: TabKey; label: string; count: number }[] = [
-  { key: 'pending', label: '待处理', count: 2 },
-  { key: 'processing', label: '审批中', count: 1 },
-  { key: 'rejected', label: '已驳回', count: 1 },
-  { key: 'done', label: '已完成', count: 3 },
-];
-
-const data: Record<TabKey, ExceptionItem[]> = {
-  pending: [
-    {
-      title: '下班缺卡',
-      date: '2026-04-22 周三',
-      detail: '系统未检测到你的下班打卡记录，若不处理将影响月报结果。',
-      status: '班次：总部标准班 09:00 - 18:00',
-      badge: '逾期风险',
-      badgeTone: 'bg-red-50 text-red-700',
-      actionPrimary: '提交补卡',
-      actionSecondary: '查看日记录',
-    },
-    {
-      title: '外勤待确认',
-      date: '2026-04-19 周日',
-      detail: '外勤打卡地点已记录，但尚未补充业务说明，无法自动转为正常出勤。',
-      status: '场景：客户家 / 工地现场',
-      badge: '需要说明',
-      badgeTone: 'bg-amber-50 text-amber-700',
-      actionPrimary: '补充说明',
-      actionSecondary: '查看详情',
-    },
-  ],
-  processing: [
-    {
-      title: '迟到补卡申请',
-      date: '2026-04-18 周五',
-      detail: '你提交的说明已进入主管审批流程，系统会在审批后回写日报结果。',
-      status: '当前处理人：张建国（主管）',
-      badge: '主管审批中',
-      badgeTone: 'bg-blue-50 text-blue-700',
-      actionPrimary: '查看进度',
-      actionSecondary: '撤销申请',
-    },
-  ],
-  rejected: [
-    {
-      title: '缺卡补卡被驳回',
-      date: '2026-04-11 周五',
-      detail: '主管认为说明材料不充分，需补充现场凭证后重新提交。',
-      status: '驳回原因：缺少业务现场佐证',
-      badge: '需重新提交',
-      badgeTone: 'bg-slate-100 text-slate-700',
-      actionPrimary: '重新提交',
-      actionSecondary: '查看原因',
-    },
-  ],
-  done: [
-    {
-      title: '补卡已通过',
-      date: '2026-04-05 周六',
-      detail: '系统已将该日状态改为正常出勤，并同步更新月报。',
-      status: '处理完成：2026-04-06 09:20',
-      badge: '已回写',
-      badgeTone: 'bg-emerald-50 text-emerald-700',
-      actionPrimary: '查看结果',
-    },
-  ],
-};
-
-export default function ExceptionsPage() {
-  const [activeTab, setActiveTab] = useState<TabKey>('pending');
-  const currentItems = data[activeTab];
+export default function EmployeeExceptions() {
+  const [activeTab, setActiveTab] = useState<ExceptionTabKey>('pending');
+  const currentGroup = exceptionTabs[activeTab];
 
   return (
-    <div className="space-y-6">
-      <section className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">待处理异常</p>
-          <p className="mt-3 text-3xl font-semibold text-slate-900">2 条</p>
-          <p className="mt-2 text-sm text-slate-500">异常要在一个地方集中处理，不再散落到多套页面里。</p>
-        </div>
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">审批中</p>
-          <p className="mt-3 text-3xl font-semibold text-blue-600">1 条</p>
-          <p className="mt-2 text-sm text-slate-500">审批状态和处理人直接展示，避免频繁追问。</p>
-        </div>
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">本月异常闭环率</p>
-          <p className="mt-3 text-3xl font-semibold text-emerald-600">86%</p>
-          <p className="mt-2 text-sm text-slate-500">系统会把已通过结果自动回写到日报与月报。</p>
-        </div>
-      </section>
+    <>
+      <header className="sticky top-0 z-10 bg-white px-4 py-3 shadow-sm">
+        <h1 className="text-center text-lg font-semibold text-gray-900">异常中心</h1>
 
-      <div className="grid gap-6 xl:grid-cols-[1.15fr,0.85fr]">
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:p-6">
-          <div className="hide-scrollbar flex gap-4 overflow-x-auto border-b border-slate-100 pb-2">
-            {tabs.map((tab) => (
+        <div className="mt-3 flex overflow-x-auto whitespace-nowrap border-b border-gray-100 hide-scrollbar">
+          {Object.entries(exceptionTabs).map(([key, group]) => {
+            const typedKey = key as ExceptionTabKey;
+            const isActive = activeTab === typedKey;
+
+            return (
               <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
+                key={key}
+                onClick={() => setActiveTab(typedKey)}
                 className={clsx(
-                  'relative whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition',
-                  activeTab === tab.key ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500 hover:text-slate-700',
+                  'relative px-3 pb-2 text-sm font-medium transition',
+                  isActive ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-700',
                 )}
               >
-                {tab.label}
-                <span className="ml-2 rounded-full bg-white px-2 py-0.5 text-xs text-slate-500 shadow-sm">
-                  {tab.count}
-                </span>
+                {group.label} ({group.records.length})
+                {typedKey === 'rejected' && group.records.length > 0 ? <span className="absolute right-1 top-0 h-1.5 w-1.5 rounded-full bg-red-500"></span> : null}
               </button>
-            ))}
-          </div>
+            );
+          })}
+        </div>
+      </header>
 
-          <div className="mt-5 space-y-4">
-            {currentItems.map((item) => (
-              <div key={`${activeTab}-${item.title}`} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full bg-red-500"></span>
-                      <h3 className="text-lg font-semibold text-slate-900">{item.title}</h3>
-                    </div>
-                    <p className="mt-2 text-sm text-slate-500">{item.date}</p>
-                  </div>
-                  <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${item.badgeTone}`}>
-                    {item.badge}
-                  </span>
+      <main className="space-y-4 p-4">
+        {currentGroup.records.map((item) => (
+          <div key={`${activeTab}-${item.title}`} className="animate-in slide-in-from-bottom-2 fade-in rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-start justify-between border-b border-gray-50 pb-3">
+              <div>
+                <div className="flex items-center">
+                  <span className={clsx('mr-2 h-2 w-2 rounded-full', item.dotTone)}></span>
+                  <h2 className="text-base font-medium text-gray-900">{item.title}</h2>
                 </div>
-
-                <p className="mt-4 text-sm leading-6 text-slate-600">{item.detail}</p>
-                <p className="mt-3 text-sm text-slate-500">{item.status}</p>
-
-                <div className="mt-5 flex flex-wrap gap-3">
-                  <button className="rounded-2xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700">
-                    {item.actionPrimary}
-                  </button>
-                  {item.actionSecondary ? (
-                    <button className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">
-                      {item.actionSecondary}
-                    </button>
-                  ) : null}
-                </div>
+                <p className="mt-1 text-sm text-gray-500">{item.date}</p>
               </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="space-y-6">
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:p-6">
-            <h3 className="text-lg font-semibold text-slate-900">处理原则</h3>
-            <div className="mt-4 space-y-3 text-sm text-slate-600">
-              <div className="flex gap-3 rounded-2xl bg-slate-50 p-4">
-                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
-                <p className="leading-6">先展示异常结果，再说明原因，最后给补卡、说明或查看进度等操作。</p>
-              </div>
-              <div className="flex gap-3 rounded-2xl bg-slate-50 p-4">
-                <Clock className="mt-0.5 h-5 w-5 shrink-0 text-slate-500" />
-                <p className="leading-6">所有操作都会回写到日报和月报，避免“补了卡但结果没变”的割裂感。</p>
-              </div>
-              <div className="flex gap-3 rounded-2xl bg-slate-50 p-4">
-                <CheckSquare className="mt-0.5 h-5 w-5 shrink-0 text-slate-500" />
-                <p className="leading-6">主管和人事看到的是同一条数据，只是可操作权限不同，不是另一套审批系统。</p>
-              </div>
+              <span className={clsx('inline-flex items-center rounded px-2 py-0.5 text-xs font-medium', item.badgeTone)}>{item.badge}</span>
             </div>
-          </div>
 
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:p-6">
-            <h3 className="text-lg font-semibold text-slate-900">状态定义</h3>
-            <div className="mt-4 space-y-3 text-sm text-slate-600">
-              {[
-                '待处理：员工还未补卡或补充说明',
-                '审批中：已提交，等待主管 / 人事处理',
-                '已驳回：说明不充分，需要重新提交',
-                '已完成：结果已回写到日报和月报',
-              ].map((item) => (
-                <div key={item} className="rounded-2xl bg-slate-50 px-4 py-3">
-                  {item}
-                </div>
+            <div className="mb-4 space-y-1 text-sm text-gray-600">
+              {item.lines.map((line) => (
+                <p key={line}>{line}</p>
+              ))}
+            </div>
+
+            <div className="mb-4 flex flex-wrap gap-2">
+              {item.steps.map((step) => (
+                <span key={step} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                  {step}
+                </span>
+              ))}
+            </div>
+
+            <div className="flex space-x-3">
+              {item.actions.map((action) => (
+                <button key={action.label} className={clsx('flex-1 rounded-lg py-2 text-sm font-medium transition', action.className)}>
+                  {action.label}
+                </button>
               ))}
             </div>
           </div>
-        </section>
-      </div>
-    </div>
+        ))}
+
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-sm font-medium text-slate-900">异常处理节奏</p>
+          <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-3">
+            <div className="rounded-lg bg-white p-3">当天先提异常说明，避免月底集中补解释。</div>
+            <div className="rounded-lg bg-white p-3">主管审批结果会自动同步到异常中心和月报。</div>
+            <div className="rounded-lg bg-white p-3">若被驳回，直接补资料后重新提交，不需要重复建单。</div>
+          </div>
+        </div>
+
+        <p className="mt-6 text-center text-xs text-gray-400">仅展示最近 30 天的异常记录</p>
+      </main>
+    </>
   );
 }
+

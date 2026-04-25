@@ -1,0 +1,5 @@
+
+> attendance-web@0.0.0 build
+> tsc -b && vite build
+
+src/pages/manager/Approval.tsx(3,35): error TS6133: 'Briefcase' is declared but its value is never read.

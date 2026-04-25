@@ -1,86 +1,90 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, Clock, Calendar, AlertCircle, FileText, FileClock, Bell } from 'lucide-react';
+import { LayoutDashboard, Users, Clock, Calendar, AlertCircle, FileClock, Bell } from 'lucide-react';
 import { clsx } from 'clsx';
+import RoleSwitchMenu from '../components/RoleSwitchMenu';
+
+const navItems = [
+  { name: '工作台', path: '/admin/dashboard', icon: LayoutDashboard, desc: '总览月报、异常与待处理事项' },
+  { name: '组织与人员', path: '/admin/organization', icon: Users, desc: '维护组织关系与员工归属' },
+  { name: '班次与规则', path: '/admin/rules', icon: Clock, desc: '统一配置班次、打卡与判定规则' },
+  { name: '排班管理', path: '/admin/schedule', icon: Calendar, desc: '查看全局排班质量与缺失情况' },
+  { name: '异常中心', path: '/admin/exceptions', icon: AlertCircle, desc: '集中处理异常、补卡与待确认记录' },
+  { name: '日志中心', path: '/admin/logs', icon: FileClock, desc: '追溯规则调整、审批与人工修正' },
+];
 
 export default function AdminLayout() {
   const location = useLocation();
-
-  const navItems = [
-    { name: '全局总览', path: '/admin/overview', icon: LayoutDashboard },
-    { name: '组织与人员', path: '/admin/organization', icon: Users },
-    { name: '班次与规则', path: '/admin/rules', icon: Clock },
-    { name: '排班管理', path: '/admin/schedule', icon: Calendar },
-    { name: '异常中心', path: '/admin/exceptions', icon: AlertCircle },
-    { name: '月报中心', path: '/admin/dashboard', icon: FileText },
-    { name: '日志中心', path: '/admin/logs', icon: FileClock },
-  ];
+  const activeItem = navItems.find((item) => location.pathname.startsWith(item.path)) ?? navItems[0];
 
   return (
-    <div className="bg-gray-50 flex h-screen overflow-hidden">
-      {/* 左侧侧边栏 */}
-      <aside className="w-64 bg-white border-r border-gray-200 hidden md:flex flex-col">
-        <div className="h-16 flex items-center px-6 border-b border-gray-200">
-          <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center mr-2">
-            <span className="text-white font-bold">A</span>
-          </div>
-          <span className="text-lg font-bold text-gray-900">考勤管理后台</span>
-        </div>
-        
-        <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
-          {navItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={clsx(
-                "flex items-center px-3 py-2.5 text-sm font-medium rounded-lg group transition",
-                location.pathname === item.path 
-                  ? "bg-blue-50 text-blue-700" 
-                  : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-              )}
-            >
-              <item.icon className={clsx("w-5 h-5 mr-3", location.pathname === item.path ? "text-blue-500" : "text-gray-400 group-hover:text-gray-500")} />
-              {item.name}
-            </Link>
-          ))}
+    <div className="min-h-screen bg-slate-50 md:flex">
+      <aside className="hidden w-80 shrink-0 flex-col border-r border-gray-200 bg-white px-5 py-6 md:flex">
+        <RoleSwitchMenu currentRole="admin" />
+
+        <nav className="mt-6 flex-1 space-y-2 overflow-y-auto">
+          {navItems.map((item) => {
+            const active = location.pathname.startsWith(item.path);
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={clsx(
+                  'group flex items-start rounded-2xl px-4 py-3 text-sm transition',
+                  active ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+                )}
+              >
+                <item.icon className={clsx('mr-3 mt-0.5 h-5 w-5 shrink-0', active ? 'text-blue-500' : 'text-gray-400 group-hover:text-gray-500')} />
+                <div>
+                  <div className="font-medium">{item.name}</div>
+                  <div className={clsx('mt-0.5 text-xs leading-5', active ? 'text-blue-500' : 'text-gray-400 group-hover:text-gray-500')}>
+                    {item.desc}
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
         </nav>
-        
-        <div className="p-4 border-t border-gray-200">
-          <div className="flex items-center cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition -m-2">
-            <div className="h-8 w-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold">
-              李
-            </div>
+
+        <div className="rounded-2xl bg-slate-50 p-4">
+          <div className="flex items-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 font-bold text-indigo-600">李</div>
             <div className="ml-3">
-              <p className="text-sm font-medium text-gray-700 group-hover:text-gray-900">李人事</p>
-              <p className="text-xs font-medium text-gray-500 group-hover:text-gray-700">系统管理员</p>
+              <p className="text-sm font-medium text-gray-800">李人事</p>
+              <p className="text-xs text-gray-500">系统管理员</p>
             </div>
           </div>
+          <p className="mt-3 text-xs leading-5 text-gray-500">桌面端已恢复工作台侧栏，可继续从左侧导航和身份切换入口进入各模块。</p>
         </div>
       </aside>
 
-      {/* 主内容区 */}
-      <main className="flex-1 flex flex-col min-w-0 bg-gray-50 overflow-hidden">
-        {/* 顶部导航 */}
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0">
-          <div className="flex items-center">
-            <h2 className="text-lg font-medium text-gray-900">月报中心</h2>
-            <span className="mx-3 text-gray-300">|</span>
-            <div className="relative rounded-md shadow-sm w-64 hidden sm:block">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+      <main className="min-w-0 flex-1">
+        <header className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 backdrop-blur md:static md:border-b">
+          <div className="flex items-center justify-between gap-4 px-4 py-4 md:px-6">
+            <div className="min-w-0">
+              <h2 className="truncate text-lg font-semibold text-gray-900">{activeItem.name}</h2>
+              <p className="truncate text-sm text-gray-500">{activeItem.desc}</p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="relative hidden w-72 rounded-xl border border-gray-200 bg-slate-50 shadow-sm lg:block">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                </div>
+                <input type="text" className="block w-full rounded-xl border-0 bg-transparent py-2 pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="搜索员工 / 工号 / 门店" />
               </div>
-              <input type="text" className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-1.5 border" placeholder="搜索员工姓名 / 工号" />
+              <button className="relative rounded-full p-2 text-gray-400 transition hover:bg-slate-100 hover:text-gray-600">
+                <span className="absolute right-2 top-2 block h-2 w-2 rounded-full bg-red-400 ring-2 ring-white" />
+                <Bell className="h-5 w-5" />
+              </button>
             </div>
           </div>
-          
-          <div className="flex items-center space-x-4">
-            <button className="text-gray-400 hover:text-gray-500 relative transition">
-              <span className="absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-400 ring-2 ring-white"></span>
-              <Bell className="h-6 w-6" />
-            </button>
+
+          <div className="px-4 pb-4 md:hidden">
+            <RoleSwitchMenu currentRole="admin" />
           </div>
         </header>
 
-        <div className="flex-1 p-6 overflow-y-auto relative">
+        <div className="px-4 py-4 md:px-6 md:py-6">
           <Outlet />
         </div>
       </main>

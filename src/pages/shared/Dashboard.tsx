@@ -4,7 +4,7 @@ import type { AppOutletContext, Role } from '../../layouts/AppShell';
 
 const roleSummary: Record<Role, { label: string; value: string; tone: string }[]> = {
   employee: [
-    { label: '今日班次', value: '早班 A班', tone: 'bg-blue-50 text-blue-700' },
+    { label: '今日班次', value: '朝 9 晚 6', tone: 'bg-blue-50 text-blue-700' },
     { label: '待处理异常', value: '1 条', tone: 'bg-amber-50 text-amber-700' },
     { label: '本月出勤', value: '18.5 天', tone: 'bg-emerald-50 text-emerald-700' },
     { label: '补卡进度', value: '1 条审批中', tone: 'bg-slate-100 text-slate-700' },
