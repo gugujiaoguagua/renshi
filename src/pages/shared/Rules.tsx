@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { AlertCircle, CheckSquare, Clock } from 'lucide-react';
 
 const shiftTemplates = [
@@ -6,7 +7,7 @@ const shiftTemplates = [
   { name: '工厂早班', time: '08:00 - 17:00', note: '工厂考勤机结果统一并入口径层。' },
 ];
 
-const ruleVersions = [
+const initialRuleVersions = [
   {
     version: 'V3.4 门店轮班组',
     status: '今日 18:00 生效',
@@ -70,6 +71,22 @@ const ruleGroups = [
 ];
 
 export default function RulesPage() {
+  const [ruleVersions, setRuleVersions] = useState(initialRuleVersions);
+  const [actionMessage, setActionMessage] = useState('');
+
+  const handleCreateVersion = () => {
+    const nextVersion = {
+      version: `V3.${ruleVersions.length + 4} 新规则草稿`,
+      status: '草稿待确认',
+      scope: '待选择生效范围',
+      owner: '当前人事',
+      highlight: '已创建新版本草稿，可继续补充外勤权限、排班口径和导出口径差异。',
+      tone: 'border-blue-100 bg-blue-50 text-blue-900',
+    };
+    setRuleVersions((current) => [nextVersion, ...current]);
+    setActionMessage('新规则版本草稿已创建，当前可继续补充生效范围、负责人和变更摘要。');
+  };
+
   return (
     <div className="space-y-6">
       <section className="grid gap-4 md:grid-cols-3">
@@ -83,6 +100,13 @@ export default function RulesPage() {
         ))}
       </section>
 
+      {actionMessage ? (
+        <section className="rounded-3xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900 shadow-sm">
+          <p className="font-semibold">规则动作已生效</p>
+          <p className="mt-2 leading-6">{actionMessage}</p>
+        </section>
+      ) : null}
+
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:p-6">
           <div className="flex items-center justify-between">
@@ -90,14 +114,18 @@ export default function RulesPage() {
               <h3 className="text-lg font-semibold text-slate-900">规则发布提醒</h3>
               <p className="mt-1 text-sm text-slate-500">规则页不只看说明，还要能看到版本、生效范围和变更摘要。</p>
             </div>
-            <button className="rounded-2xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700">
+            <button
+              type="button"
+              onClick={handleCreateVersion}
+              className="rounded-2xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+            >
               新建规则版本
             </button>
           </div>
 
           <div className="mt-5 space-y-3">
             {ruleVersions.map((item) => (
-              <div key={item.version} className={`rounded-2xl border p-4 ${item.tone}`}>
+              <div key={`${item.version}-${item.status}`} className={`rounded-2xl border p-4 ${item.tone}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-semibold">{item.version}</p>
                   <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold">{item.status}</span>
@@ -161,4 +189,3 @@ export default function RulesPage() {
     </div>
   );
 }
-

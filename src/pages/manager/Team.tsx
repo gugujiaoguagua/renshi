@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { AlertCircle, AlertTriangle, ArrowRight, Briefcase, Calendar, CheckSquare, FileText, MapPin, Plane, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -73,6 +74,14 @@ const writebackSteps = [
 ];
 
 export default function ManagerTeam() {
+  const [hasCheckedOut, setHasCheckedOut] = useState(false);
+  const [actionNotice, setActionNotice] = useState('');
+
+  const handleManagerPunch = () => {
+    setHasCheckedOut(true);
+    setActionNotice('主管本人下班打卡已记录，团队异常与审批汇总会继续留在首页处理。');
+  };
+
   return (
     <>
       <header className="sticky top-0 z-10 border-b border-white/60 bg-white/90 px-4 py-3 shadow-sm backdrop-blur">
@@ -119,46 +128,47 @@ export default function ManagerTeam() {
                 <button
                   type="button"
                   aria-label="下班打卡"
+                  onClick={handleManagerPunch}
                   className="absolute left-1/2 top-[10px] z-10 inline-flex h-[202px] w-[202px] -translate-x-1/2 items-center justify-center rounded-full bg-blue-600 px-6 text-white shadow-[0_22px_48px_rgba(37,99,235,0.35)] transition hover:bg-blue-700 active:scale-95"
                 >
                   <span>
-                    <span className="block text-[18px] font-bold leading-8">下班打卡</span>
-                    <span className="mt-2 block text-[14px] leading-5 text-blue-100">范围：总部园区 100m 内</span>
+                    <span className="block text-[18px] font-bold leading-8">{hasCheckedOut ? '打卡完成' : '下班打卡'}</span>
+                    <span className="mt-2 block text-[14px] leading-5 text-blue-100">{hasCheckedOut ? '18:05 已回写成功' : '范围：总部园区 100m 内'}</span>
                   </span>
                 </button>
-                <div className="absolute -bottom-[12px] left-6 flex flex-col items-center">
-                  <button className="inline-flex h-[42px] w-[42px] items-center justify-center rounded-full bg-blue-50 text-blue-600 shadow-sm transition hover:bg-blue-100 active:scale-95">
+                <Link to="/manager/approval" className="absolute -bottom-[12px] left-6 flex flex-col items-center">
+                  <span className="inline-flex h-[42px] w-[42px] items-center justify-center rounded-full bg-blue-50 text-blue-600 shadow-sm transition hover:bg-blue-100 active:scale-95">
                     <Briefcase className="h-4 w-4" />
-                  </button>
+                  </span>
                   <span className="mt-2 text-[11px] font-semibold text-slate-700">外勤打卡</span>
-                </div>
-                <div className="absolute -bottom-[12px] right-6 flex flex-col items-center">
-                  <button className="inline-flex h-[42px] w-[42px] items-center justify-center rounded-full bg-blue-50 text-blue-600 shadow-sm transition hover:bg-blue-100 active:scale-95">
+                </Link>
+                <Link to="/manager/approval" className="absolute -bottom-[12px] right-6 flex flex-col items-center">
+                  <span className="inline-flex h-[42px] w-[42px] items-center justify-center rounded-full bg-blue-50 text-blue-600 shadow-sm transition hover:bg-blue-100 active:scale-95">
                     <Plane className="h-4 w-4" />
-                  </button>
+                  </span>
                   <span className="mt-2 text-[11px] font-semibold text-slate-700">出差打卡</span>
-                </div>
+                </Link>
               </div>
             </div>
             <div className="mt-4 hidden items-center justify-center gap-4 sm:flex">
-              <button className="inline-flex h-[108px] w-[108px] items-center justify-center rounded-full bg-slate-100 text-slate-700 shadow-sm transition hover:bg-slate-200 active:scale-95">
+              <Link to="/manager/approval" className="inline-flex h-[108px] w-[108px] items-center justify-center rounded-full bg-slate-100 text-slate-700 shadow-sm transition hover:bg-slate-200 active:scale-95">
                 <span>
                   <Briefcase className="mx-auto h-5 w-5" />
                   <span className="mt-2 block text-sm font-semibold">外勤打卡</span>
                 </span>
-              </button>
-              <button className="inline-flex h-36 w-36 items-center justify-center rounded-full bg-blue-600 text-white shadow-[0_18px_40px_rgba(37,99,235,0.32)] transition hover:bg-blue-700 active:scale-95">
+              </Link>
+              <button type="button" onClick={handleManagerPunch} className="inline-flex h-36 w-36 items-center justify-center rounded-full bg-blue-600 text-white shadow-[0_18px_40px_rgba(37,99,235,0.32)] transition hover:bg-blue-700 active:scale-95">
                 <span>
-                  <span className="block text-2xl font-bold">下班打卡</span>
-                  <span className="mt-2 block text-xs text-blue-100">范围：总部园区 100m 内</span>
+                  <span className="block text-2xl font-bold">{hasCheckedOut ? '打卡完成' : '下班打卡'}</span>
+                  <span className="mt-2 block text-xs text-blue-100">{hasCheckedOut ? '18:05 已回写成功' : '范围：总部园区 100m 内'}</span>
                 </span>
               </button>
-              <button className="inline-flex h-[108px] w-[108px] items-center justify-center rounded-full bg-slate-100 text-slate-700 shadow-sm transition hover:bg-slate-200 active:scale-95">
+              <Link to="/manager/approval" className="inline-flex h-[108px] w-[108px] items-center justify-center rounded-full bg-slate-100 text-slate-700 shadow-sm transition hover:bg-slate-200 active:scale-95">
                 <span>
                   <Plane className="mx-auto h-5 w-5" />
                   <span className="mt-2 block text-sm font-semibold">出差打卡</span>
                 </span>
-              </button>
+              </Link>
             </div>
             <p className="mt-2 hidden items-center text-xs text-gray-500 sm:inline-flex">
               <MapPin className="mr-1 h-3.5 w-3.5" />
@@ -194,6 +204,13 @@ export default function ManagerTeam() {
             ))}
           </div>
         </section>
+
+        {actionNotice ? (
+          <section className="rounded-3xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900 shadow-sm">
+            <p className="font-semibold">主管本人打卡已完成</p>
+            <p className="mt-2 leading-6">{actionNotice}</p>
+          </section>
+        ) : null}
 
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {summaryCards.map((item) => {

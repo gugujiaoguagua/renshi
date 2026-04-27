@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { AlertTriangle, ArrowRight, Calendar, CheckSquare, Download, Users } from 'lucide-react';
+import { downloadCsv } from '../../utils/downloadCsv';
 
 const summaryCards = [
   { label: '本周未排班', value: '4 人', detail: '2 人在直营二店，2 人在技术二组，优先补齐再发布。', tone: 'text-red-600' },
@@ -61,9 +63,61 @@ const riskNotes = [
   { title: '重算提醒', desc: '规则调整后，已发布但未重算的组织仍需复核异常结果。', tone: 'bg-blue-50 text-blue-900', icon: Calendar },
 ];
 
+const weeks = ['2026-04 第4周', '2026-05 第1周', '2026-05 第2周'];
+
 export default function AdminSchedule() {
+  const [weekIndex, setWeekIndex] = useState(0);
+  const [processingRow, setProcessingRow] = useState<(typeof scheduleRows)[number] | null>(null);
+  const [actionMessage, setActionMessage] = useState('');
+
+  const handleSwitchWeek = () => {
+    setWeekIndex((current) => (current + 1) % weeks.length);
+    setActionMessage(`已切换到 ${weeks[(weekIndex + 1) % weeks.length]}，当前排班清单已同步刷新。`);
+  };
+
+  const handleExport = () => {
+    downloadCsv(
+      '组织排班清单.csv',
+      ['组织', '负责人', '状态', '阶段', '详情', '下一步'],
+      scheduleRows.map((item) => [item.department, item.owner, item.status, item.stage, item.detail, item.nextStep]),
+    );
+    setActionMessage(`已导出 ${scheduleRows.length} 条组织排班记录。`);
+  };
+
   return (
     <div className="space-y-6">
+      {processingRow ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/35 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-[28px] border border-white/70 bg-white p-5 shadow-[0_24px_60px_rgba(15,23,42,0.24)]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-blue-600">排班处理面板</p>
+                <h2 className="mt-2 text-lg font-semibold text-slate-900">{processingRow.department}</h2>
+                <p className="mt-1 text-sm text-slate-500">负责人：{processingRow.owner}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProcessingRow(null)}
+                className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-500 transition hover:bg-slate-50"
+              >
+                关闭
+              </button>
+            </div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                <p className="font-semibold text-slate-900">当前详情</p>
+                <p className="mt-2 leading-6">{processingRow.detail}</p>
+              </div>
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+                <p className="font-semibold">下一步建议</p>
+                <p className="mt-2 leading-6">{processingRow.nextStep}</p>
+                <p className="mt-2 leading-6">发布后回写：{processingRow.writeback}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <section className="rounded-[32px] bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600 p-6 text-white shadow-[0_20px_50px_rgba(79,70,229,0.2)]">
         <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-2xl">
@@ -72,19 +126,35 @@ export default function AdminSchedule() {
             <p className="mt-3 text-sm leading-6 text-blue-50/90">
               这页承接工作台里的排班入口，用于查看组织级未排班、发布状态和潜在冲突，避免继续生成异常。
             </p>
+            <p className="mt-3 text-sm font-medium text-blue-100">当前周次：{weeks[weekIndex]}</p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <button className="inline-flex items-center rounded-2xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/15">
+            <button
+              type="button"
+              onClick={handleSwitchWeek}
+              className="inline-flex items-center rounded-2xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/15"
+            >
               <Calendar className="mr-2 h-4 w-4" />
               切换周次
             </button>
-            <button className="inline-flex items-center rounded-2xl bg-white px-4 py-2 text-sm font-medium text-slate-900 transition hover:bg-slate-100">
+            <button
+              type="button"
+              onClick={handleExport}
+              className="inline-flex items-center rounded-2xl bg-white px-4 py-2 text-sm font-medium text-slate-900 transition hover:bg-slate-100"
+            >
               <Download className="mr-2 h-4 w-4" />
               导出班表
             </button>
           </div>
         </div>
       </section>
+
+      {actionMessage ? (
+        <section className="rounded-3xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900 shadow-sm">
+          <p className="font-semibold">操作已完成</p>
+          <p className="mt-2 leading-6">{actionMessage}</p>
+        </section>
+      ) : null}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {summaryCards.map((item) => (
@@ -125,7 +195,11 @@ export default function AdminSchedule() {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 xl:flex-col xl:items-end">
-                  <button className="inline-flex items-center rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-gray-900 transition hover:-translate-y-0.5 hover:shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setProcessingRow(item)}
+                    className="inline-flex items-center rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-gray-900 transition hover:-translate-y-0.5 hover:shadow-sm"
+                  >
                     进入处理
                     <ArrowRight className="ml-1 h-4 w-4" />
                   </button>

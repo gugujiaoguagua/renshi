@@ -1,6 +1,7 @@
+import { useMemo, useState } from 'react';
 import { AlertCircle, ArrowRight, CheckSquare, Clock, Download, Filter, Search } from 'lucide-react';
-
 import { Link } from 'react-router-dom';
+import { downloadCsv } from '../../utils/downloadCsv';
 
 const summaryCards = [
   { label: '待处理异常', value: '12', tone: 'text-red-600' },
@@ -9,7 +10,7 @@ const summaryCards = [
   { label: '今日已闭环', value: '8', tone: 'text-emerald-600' },
 ];
 
-const exceptionRows = [
+const initialExceptionRows = [
   {
     employee: '李四',
     code: 'E002',
@@ -48,9 +49,88 @@ const actions = [
   { title: '查看操作留痕', desc: '若结果有争议，可回溯日志中心。', to: '/admin/logs' },
 ];
 
+const filterOptions = ['全部', '高风险', '待审批', '待修正', '已闭环'] as const;
+type FilterType = (typeof filterOptions)[number];
+
 export default function AdminExceptions() {
+  const [rows, setRows] = useState(initialExceptionRows);
+  const [keyword, setKeyword] = useState('');
+  const [activeFilter, setActiveFilter] = useState<FilterType>('全部');
+  const [processingRow, setProcessingRow] = useState<(typeof initialExceptionRows)[number] | null>(null);
+  const [actionMessage, setActionMessage] = useState('');
+
+  const filteredRows = useMemo(() => {
+    return rows.filter((item) => {
+      const matchKeyword = !keyword || [item.employee, item.code, item.department, item.type, item.detail].some((part) => part.includes(keyword));
+      const matchFilter =
+        activeFilter === '全部' ||
+        (activeFilter === '高风险' && item.risk === '高') ||
+        (activeFilter === '待审批' && item.status.includes('审批')) ||
+        (activeFilter === '待修正' && item.status.includes('修正')) ||
+        (activeFilter === '已闭环' && item.status === '已闭环');
+      return matchKeyword && matchFilter;
+    });
+  }, [activeFilter, keyword, rows]);
+
+  const handleExport = () => {
+    downloadCsv(
+      '异常清单.csv',
+      ['姓名', '工号', '部门', '异常类型', '状态', '风险', '详情'],
+      filteredRows.map((item) => [item.employee, item.code, item.department, item.type, item.status, item.risk, item.detail]),
+    );
+    setActionMessage(`已导出 ${filteredRows.length} 条异常记录。`);
+  };
+
+  const handleProcess = (row: (typeof initialExceptionRows)[number]) => {
+    setProcessingRow(row);
+    setRows((current) =>
+      current.map((item) =>
+        item.code === row.code
+          ? {
+              ...item,
+              status: '已闭环',
+              risk: '低',
+              detail: `${item.detail} 当前已进入人事复核完成状态，并同步回写异常中心 / 月报。`,
+              tone: 'border-emerald-100 bg-emerald-50',
+            }
+          : item,
+      ),
+    );
+    setActionMessage(`${row.employee} 的异常已进入处理完成状态，列表和导出口径已同步刷新。`);
+  };
+
   return (
     <div className="space-y-6">
+      {processingRow ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/35 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-[28px] border border-white/70 bg-white p-5 shadow-[0_24px_60px_rgba(15,23,42,0.24)]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-blue-600">异常处理结果</p>
+                <h2 className="mt-2 text-lg font-semibold text-slate-900">{processingRow.employee} · {processingRow.type}</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProcessingRow(null)}
+                className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-500 transition hover:bg-slate-50"
+              >
+                关闭
+              </button>
+            </div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                <p className="font-semibold text-slate-900">原始详情</p>
+                <p className="mt-2 leading-6">{processingRow.detail}</p>
+              </div>
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-900">
+                <p className="font-semibold">处理后状态</p>
+                <p className="mt-2 leading-6">已闭环，并已同步更新异常中心与月报口径。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <section className="rounded-[32px] bg-gradient-to-r from-red-600 via-rose-600 to-orange-500 p-6 text-white shadow-[0_20px_50px_rgba(244,63,94,0.22)]">
         <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-2xl">
@@ -61,17 +141,32 @@ export default function AdminExceptions() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <button className="inline-flex items-center rounded-2xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/15">
+            <button
+              type="button"
+              onClick={() => setActiveFilter('高风险')}
+              className="inline-flex items-center rounded-2xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/15"
+            >
               <Filter className="mr-2 h-4 w-4" />
               批量筛选
             </button>
-            <button className="inline-flex items-center rounded-2xl bg-white px-4 py-2 text-sm font-medium text-slate-900 transition hover:bg-slate-100">
+            <button
+              type="button"
+              onClick={handleExport}
+              className="inline-flex items-center rounded-2xl bg-white px-4 py-2 text-sm font-medium text-slate-900 transition hover:bg-slate-100"
+            >
               <Download className="mr-2 h-4 w-4" />
               导出异常清单
             </button>
           </div>
         </div>
       </section>
+
+      {actionMessage ? (
+        <section className="rounded-3xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900 shadow-sm">
+          <p className="font-semibold">当前操作</p>
+          <p className="mt-2 leading-6">{actionMessage}</p>
+        </section>
+      ) : null}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {summaryCards.map((item) => (
@@ -86,13 +181,20 @@ export default function AdminExceptions() {
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex flex-1 items-center gap-3 rounded-2xl border border-gray-200 bg-slate-50 px-4 py-3">
             <Search className="h-4 w-4 text-gray-400" />
-            <input className="w-full bg-transparent text-sm outline-none" placeholder="搜索姓名 / 工号 / 部门 / 异常类型" />
+            <input
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              className="w-full bg-transparent text-sm outline-none"
+              placeholder="搜索姓名 / 工号 / 部门 / 异常类型"
+            />
           </div>
           <div className="flex flex-wrap gap-2 text-sm">
-            {['全部', '高风险', '待审批', '待修正', '已闭环'].map((item, index) => (
+            {filterOptions.map((item) => (
               <button
                 key={item}
-                className={`rounded-full px-4 py-2 font-medium transition ${index === 0 ? 'bg-gray-900 text-white' : 'bg-slate-100 text-gray-600 hover:bg-slate-200'}`}
+                type="button"
+                onClick={() => setActiveFilter(item)}
+                className={`rounded-full px-4 py-2 font-medium transition ${activeFilter === item ? 'bg-gray-900 text-white' : 'bg-slate-100 text-gray-600 hover:bg-slate-200'}`}
               >
                 {item}
               </button>
@@ -117,27 +219,37 @@ export default function AdminExceptions() {
 
       <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="space-y-3">
-          {exceptionRows.map((item) => (
-            <div key={`${item.employee}-${item.type}`} className={`rounded-3xl border p-5 shadow-sm ${item.tone}`}>
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-lg font-semibold text-gray-900">{item.employee}</h2>
-                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-600">{item.code}</span>
-                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-600">{item.type}</span>
+          {filteredRows.length > 0 ? (
+            filteredRows.map((item) => (
+              <div key={`${item.employee}-${item.type}`} className={`rounded-3xl border p-5 shadow-sm ${item.tone}`}>
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-lg font-semibold text-gray-900">{item.employee}</h2>
+                      <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-600">{item.code}</span>
+                      <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-600">{item.type}</span>
+                    </div>
+                    <p className="mt-2 text-sm text-gray-500">{item.department} · 风险等级 {item.risk}</p>
+                    <p className="mt-3 text-sm leading-6 text-gray-700">{item.detail}</p>
                   </div>
-                  <p className="mt-2 text-sm text-gray-500">{item.department} · 风险等级 {item.risk}</p>
-                  <p className="mt-3 text-sm leading-6 text-gray-700">{item.detail}</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <span className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-gray-700">{item.status}</span>
-                  <button className="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-gray-900 transition hover:-translate-y-0.5 hover:shadow-sm">
-                    立即处理
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-gray-700">{item.status}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleProcess(item)}
+                      className="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-gray-900 transition hover:-translate-y-0.5 hover:shadow-sm"
+                    >
+                      立即处理
+                    </button>
+                  </div>
                 </div>
               </div>
+            ))
+          ) : (
+            <div className="rounded-3xl border border-dashed border-slate-200 bg-white px-4 py-12 text-center text-sm text-slate-400 shadow-sm">
+              当前筛选条件下暂无异常记录
             </div>
-          ))}
+          )}
         </div>
 
         <div className="space-y-6">
@@ -156,7 +268,6 @@ export default function AdminExceptions() {
           <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-blue-600" />
-
               <h3 className="text-lg font-semibold text-gray-900">关联动作</h3>
             </div>
             <div className="mt-4 space-y-3">
@@ -177,7 +288,6 @@ export default function AdminExceptions() {
           <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5 shadow-sm">
             <div className="flex items-start gap-3">
               <CheckSquare className="mt-0.5 h-5 w-5 text-emerald-600" />
-
               <div>
                 <h3 className="text-sm font-semibold text-emerald-900">已接入首页闭环</h3>
                 <p className="mt-1 text-sm leading-6 text-emerald-800">

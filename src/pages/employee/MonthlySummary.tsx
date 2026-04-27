@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { AlertCircle, CheckSquare, Clock, FileText } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const summaryCards = [
   { label: '应出勤天数', value: '22 天', tone: 'text-slate-900' },
@@ -54,6 +55,20 @@ const confirmationTimeline = [
 ];
 
 export default function EmployeeMonthlySummary() {
+  const navigate = useNavigate();
+  const [hasConfirmed, setHasConfirmed] = useState(false);
+  const [actionMessage, setActionMessage] = useState('');
+
+  const handleConfirm = () => {
+    setHasConfirmed(true);
+    setActionMessage('本月考勤结果已确认，系统会锁定当前月报口径并保留确认留痕。');
+  };
+
+  const handleContinue = () => {
+    setActionMessage('已为你保留当前月报状态，继续去异常中心处理未闭环记录。');
+    navigate('/employee/exceptions');
+  };
+
   return (
     <div className="space-y-6">
       <section className="rounded-[28px] bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-500 p-5 text-white shadow-[0_18px_40px_rgba(37,99,235,0.24)]">
@@ -63,6 +78,13 @@ export default function EmployeeMonthlySummary() {
           第二阶段沟通里明确提到月底异常提醒和次月结果确认，这里补回员工月度确认页，让员工不只看到日常打卡，还能看到本月最终结果。
         </p>
       </section>
+
+      {actionMessage ? (
+        <section className={`rounded-3xl border p-4 shadow-sm ${hasConfirmed ? 'border-emerald-100 bg-emerald-50 text-emerald-900' : 'border-blue-100 bg-blue-50 text-blue-900'}`}>
+          <p className="text-sm font-semibold">操作已生效</p>
+          <p className="mt-2 text-sm leading-6 opacity-90">{actionMessage}</p>
+        </section>
+      ) : null}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {summaryCards.map((item) => (
@@ -78,9 +100,11 @@ export default function EmployeeMonthlySummary() {
           <div className="flex items-start gap-3 text-red-900">
             <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
             <div>
-              <p className="text-sm font-semibold">还有 1 条异常未闭环</p>
+              <p className="text-sm font-semibold">{hasConfirmed ? '本月结果已确认' : '还有 1 条异常未闭环'}</p>
               <p className="mt-2 text-sm leading-6 text-red-800">
-                次月 2 号前请完成异常处理并确认月度结果，超时会按默认确认处理。
+                {hasConfirmed
+                  ? '当前结果已经锁定；如果后续还有争议，可以继续去异常中心补充说明并保留日志。'
+                  : '次月 2 号前请完成异常处理并确认月度结果，超时会按默认确认处理。'}
               </p>
             </div>
           </div>
@@ -155,10 +179,18 @@ export default function EmployeeMonthlySummary() {
               <h2 className="text-lg font-semibold">确认动作</h2>
             </div>
             <div className="mt-4 space-y-3 text-sm text-slate-600">
-              <button className="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700">
-                确认本月考勤结果
+              <button
+                type="button"
+                onClick={handleConfirm}
+                className="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
+              >
+                {hasConfirmed ? '已确认本月考勤结果' : '确认本月考勤结果'}
               </button>
-              <button className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+              <button
+                type="button"
+                onClick={handleContinue}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
                 暂不确认，继续处理异常
               </button>
               <p className="text-xs leading-5 text-slate-400">确认后会立即锁定本月结果并保留日志留痕；若仍有争议，可先回异常中心继续处理后再确认。</p>

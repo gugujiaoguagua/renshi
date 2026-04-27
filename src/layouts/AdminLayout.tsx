@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Users, Clock, Calendar, AlertCircle, FileClock, Bell } from 'lucide-react';
 import { clsx } from 'clsx';
 import RoleSwitchMenu from '../components/RoleSwitchMenu';
+
 
 const navItems = [
   { name: '工作台', path: '/admin/dashboard', icon: LayoutDashboard, desc: '总览月报、异常与待处理事项' },
@@ -12,9 +14,17 @@ const navItems = [
   { name: '日志中心', path: '/admin/logs', icon: FileClock, desc: '追溯规则调整、审批与人工修正' },
 ];
 
+const layoutNotifications = [
+  { title: '异常中心仍有 3 条高风险记录', detail: '建议优先处理迟到 45 分钟和补卡超时两类记录。', tone: 'border-red-100 bg-red-50 text-red-900' },
+  { title: '技术二组班表待发布', detail: '组织归属刚调整，建议确认后重新发布本周班表。', tone: 'border-amber-100 bg-amber-50 text-amber-900' },
+  { title: '月报模板已切到人事标准版', detail: '导出前可再检查字段模板与回写来源是否一致。', tone: 'border-blue-100 bg-blue-50 text-blue-900' },
+];
+
 export default function AdminLayout() {
   const location = useLocation();
   const activeItem = navItems.find((item) => location.pathname.startsWith(item.path)) ?? navItems[0];
+  const [showNotifications, setShowNotifications] = useState(false);
+
 
   return (
     <div className="min-h-screen bg-slate-50 md:flex">
@@ -72,11 +82,37 @@ export default function AdminLayout() {
                 </div>
                 <input type="text" className="block w-full rounded-xl border-0 bg-transparent py-2 pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="搜索员工 / 工号 / 门店" />
               </div>
-              <button className="relative rounded-full p-2 text-gray-400 transition hover:bg-slate-100 hover:text-gray-600">
-                <span className="absolute right-2 top-2 block h-2 w-2 rounded-full bg-red-400 ring-2 ring-white" />
-                <Bell className="h-5 w-5" />
-              </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowNotifications((current) => !current)}
+                  className="relative rounded-full p-2 text-gray-400 transition hover:bg-slate-100 hover:text-gray-600"
+                >
+                  <span className="absolute right-2 top-2 block h-2 w-2 rounded-full bg-red-400 ring-2 ring-white" />
+                  <Bell className="h-5 w-5" />
+                </button>
+                {showNotifications ? (
+                  <div className="absolute right-0 top-12 z-30 w-80 rounded-[24px] border border-slate-200 bg-white p-4 shadow-[0_18px_45px_rgba(15,23,42,0.14)]">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">待处理提醒</p>
+                        <p className="mt-1 text-xs text-slate-500">点击铃铛可收起，当前展示 3 条重点事项。</p>
+                      </div>
+                      <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600">3 条</span>
+                    </div>
+                    <div className="mt-4 space-y-3">
+                      {layoutNotifications.map((item) => (
+                        <div key={item.title} className={clsx('rounded-2xl border p-3 text-sm', item.tone)}>
+                          <p className="font-semibold">{item.title}</p>
+                          <p className="mt-2 leading-6 opacity-90">{item.detail}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
+
           </div>
 
           <div className="px-4 pb-4 md:hidden">

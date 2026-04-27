@@ -1,5 +1,7 @@
 import { useState } from 'react';
+
 import { AlertCircle, ArrowRight, Briefcase, Calendar, CheckSquare, Clock, FileText, MapPin, Plane, RefreshCw } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 
 type ApplyType = 'leave' | 'trip' | 'outing' | 'shift';
 
@@ -256,11 +258,25 @@ const collisionRules = [
 ];
 
 export default function EmployeeApply() {
-  const [activeType, setActiveType] = useState<ApplyType>('leave');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const searchType = searchParams.get('type');
+  const activeType = applyCards.some((item) => item.id === searchType) ? (searchType as ApplyType) : 'leave';
+  const [submitMessage, setSubmitMessage] = useState('');
+
+  const handleTypeChange = (type: ApplyType) => {
+    setSubmitMessage('');
+    setSearchParams(type === 'leave' ? {} : { type });
+  };
 
   const activeCard = applyCards.find((item) => item.id === activeType) ?? applyCards[0];
   const draft = draftConfigs[activeType];
   const sceneValidation = sceneValidationConfigs[activeType];
+
+  const handleSubmit = () => {
+    setSubmitMessage(`${draft.submitText} 已提交，当前草稿会进入主管审批，并同步回写异常中心 / 月报口径。`);
+  };
+
+
 
   return (
     <div className="space-y-6">
@@ -279,7 +295,8 @@ export default function EmployeeApply() {
           return (
             <button
               key={item.title}
-              onClick={() => setActiveType(item.id)}
+              onClick={() => handleTypeChange(item.id)}
+
               className={`rounded-3xl border p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${isActive ? item.activeTone : item.tone}`}
             >
               <div className="flex items-start justify-between gap-3">
@@ -348,9 +365,20 @@ export default function EmployeeApply() {
               </div>
             </div>
 
-            <button className="mt-5 inline-flex w-full items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700">
+            <button
+              type="button"
+              onClick={handleSubmit}
+              className="mt-5 inline-flex w-full items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
+            >
               {draft.submitText}
             </button>
+
+            {submitMessage ? (
+              <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm leading-6 text-emerald-900">
+                <p className="font-semibold">提交成功</p>
+                <p className="mt-2">{submitMessage}</p>
+              </div>
+            ) : null}
           </div>
 
           <div className="rounded-3xl border border-amber-100 bg-amber-50 p-5 shadow-sm">

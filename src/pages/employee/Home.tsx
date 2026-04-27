@@ -260,18 +260,18 @@ export default function EmployeeHome() {
                     <span className="mt-2 block text-[14px] leading-5 text-blue-100">{hasCompletedPunch ? '18:02 已回写成功' : '范围：公司 100m 内'}</span>
                   </span>
                 </button>
-                <div className="absolute -bottom-[12px] left-6 flex flex-col items-center">
-                  <button className="inline-flex h-[42px] w-[42px] items-center justify-center rounded-full bg-blue-50 text-blue-600 shadow-sm transition hover:bg-blue-100 active:scale-95">
+                <Link to="/employee/apply?type=outing" className="absolute -bottom-[12px] left-6 flex flex-col items-center">
+                  <span className="inline-flex h-[42px] w-[42px] items-center justify-center rounded-full bg-blue-50 text-blue-600 shadow-sm transition hover:bg-blue-100 active:scale-95">
                     <Briefcase className="h-4 w-4" />
-                  </button>
+                  </span>
                   <span className="mt-2 text-[11px] font-semibold text-slate-700">外勤打卡</span>
-                </div>
-                <div className="absolute -bottom-[12px] right-6 flex flex-col items-center">
-                  <button className="inline-flex h-[42px] w-[42px] items-center justify-center rounded-full bg-blue-50 text-blue-600 shadow-sm transition hover:bg-blue-100 active:scale-95">
+                </Link>
+                <Link to="/employee/apply?type=trip" className="absolute -bottom-[12px] right-6 flex flex-col items-center">
+                  <span className="inline-flex h-[42px] w-[42px] items-center justify-center rounded-full bg-blue-50 text-blue-600 shadow-sm transition hover:bg-blue-100 active:scale-95">
                     <Plane className="h-4 w-4" />
-                  </button>
+                  </span>
                   <span className="mt-2 text-[11px] font-semibold text-slate-700">出差打卡</span>
-                </div>
+                </Link>
               </div>
             </div>
             <div className="mt-4 hidden items-center justify-center gap-4 sm:flex">
@@ -291,12 +291,12 @@ export default function EmployeeHome() {
                   <span className="mt-2 block text-xs text-blue-100">{hasCompletedPunch ? '18:02 已回写成功' : '范围：公司 100m 内'}</span>
                 </span>
               </button>
-              <button className="inline-flex h-[108px] w-[108px] items-center justify-center rounded-full bg-slate-100 text-slate-700 shadow-sm transition hover:bg-slate-200 active:scale-95">
+              <Link to="/employee/apply?type=trip" className="inline-flex h-[108px] w-[108px] items-center justify-center rounded-full bg-slate-100 text-slate-700 shadow-sm transition hover:bg-slate-200 active:scale-95">
                 <span>
                   <Plane className="mx-auto h-5 w-5" />
                   <span className="mt-2 block text-sm font-semibold">出差打卡</span>
                 </span>
-              </button>
+              </Link>
             </div>
             <p className="mt-2 hidden items-center text-xs text-gray-500 sm:inline-flex">
               <MapPin className="mr-1 h-3.5 w-3.5" />

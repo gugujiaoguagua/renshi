@@ -32,7 +32,8 @@ export type AppOutletContext = {
   navItems: NavItem[];
 };
 
-export const NAV_ITEMS: NavItem[] = [
+const NAV_ITEMS: NavItem[] = [
+
   {
     label: '工作台',
     path: '/dashboard',

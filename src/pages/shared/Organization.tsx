@@ -109,19 +109,48 @@ export default function OrganizationPage() {
   const [keyword, setKeyword] = useState('');
   const [orgFilter, setOrgFilter] = useState('全部组织');
   const [groupFilter, setGroupFilter] = useState('全部考勤组');
+  const [dialogTitle, setDialogTitle] = useState('');
+  const [dialogDescription, setDialogDescription] = useState('');
 
   const filteredEmployees = useMemo(() => {
     return employees.filter((employee) => {
       const matchKeyword = !keyword || [employee.name, employee.code, employee.department, employee.post].some((item) => item.toLowerCase().includes(keyword.toLowerCase()));
       const matchOrg = orgFilter === '全部组织' || employee.org === orgFilter;
       const matchGroup = groupFilter === '全部考勤组' || employee.group === groupFilter;
-
       return matchKeyword && matchOrg && matchGroup;
     });
   }, [groupFilter, keyword, orgFilter]);
 
+  const openDialog = (title: string, description: string) => {
+    setDialogTitle(title);
+    setDialogDescription(description);
+  };
+
   return (
     <div className="space-y-6">
+      {dialogTitle ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/35 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-[28px] border border-white/70 bg-white p-5 shadow-[0_24px_60px_rgba(15,23,42,0.24)]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-blue-600">组织动作反馈</p>
+                <h2 className="mt-2 text-lg font-semibold text-slate-900">{dialogTitle}</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDialogTitle('')}
+                className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-500 transition hover:bg-slate-50"
+              >
+                关闭
+              </button>
+            </div>
+            <div className="mt-4 rounded-3xl border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-blue-900">
+              {dialogDescription}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <section className="grid gap-4 md:grid-cols-3">
         {departments.map((item) => (
           <div key={item.name} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -164,10 +193,18 @@ export default function OrganizationPage() {
           </div>
 
           <div className="flex gap-3">
-            <button className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+            <button
+              type="button"
+              onClick={() => openDialog('批量导入', '已打开组织导入流程占位。后续可在这里接 Excel / 企微同步导入，并继续校验工号、组织和考勤组映射。')}
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+            >
               批量导入
             </button>
-            <button className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700">
+            <button
+              type="button"
+              onClick={() => openDialog('新增员工', '已打开新增员工占位。可继续补员工基本信息、组织归属、考勤组和默认班次。')}
+              className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
+            >
               新增员工
             </button>
           </div>
@@ -269,7 +306,15 @@ export default function OrganizationPage() {
                   <td className="whitespace-nowrap px-5 py-4">
                     <span className={`rounded-full px-3 py-1 text-xs font-semibold ${employee.mappingTone}`}>{employee.mappingStatus}</span>
                   </td>
-                  <td className="whitespace-nowrap px-5 py-4 font-semibold text-blue-700">编辑信息</td>
+                  <td className="whitespace-nowrap px-5 py-4">
+                    <button
+                      type="button"
+                      onClick={() => openDialog('编辑信息', `${employee.name}（${employee.code}）当前可继续编辑组织归属、考勤组、默认班次与同步来源。`)}
+                      className="font-semibold text-blue-700 transition hover:text-blue-800"
+                    >
+                      编辑信息
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -279,4 +324,3 @@ export default function OrganizationPage() {
     </div>
   );
 }
-

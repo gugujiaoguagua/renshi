@@ -288,7 +288,53 @@ function getImpactChips(item: ApprovalItem, pending: boolean) {
   return ['审批已完成', '异常已回写', '月报已同步'];
 }
 
-function ApprovalCard({ item, pending }: { item: ApprovalItem; pending: boolean }) {
+function getApprovalKey(item: ApprovalItem) {
+  return `${item.applicant}-${item.kindLabel}-${item.submittedAt}`;
+}
+
+function buildApprovedItem(item: ApprovalItem): ApprovalItem {
+  return {
+    ...item,
+    status: '已通过',
+    statusTone: 'bg-emerald-50 text-emerald-700',
+    tone: 'border-emerald-100 bg-emerald-50',
+    sync: '同步状态：已回写异常中心 / 团队月报 / 日志中心',
+    note: `${item.note} 审批已处理，结果会继续回写到异常中心、团队月报和日志中心。`,
+    rows: [
+      ...item.rows.slice(0, 3),
+      { label: '处理结果', value: '审批通过并已回写当前口径', valueTone: 'text-emerald-700 font-semibold' },
+    ],
+  };
+}
+
+function buildRejectedItem(item: ApprovalItem): ApprovalItem {
+  return {
+    ...item,
+    status: '已驳回',
+    statusTone: 'bg-red-50 text-red-700',
+    tone: 'border-red-100 bg-red-50',
+    sync: '同步状态：已保留驳回原因，等待补资料重提',
+    note: `${item.note} 本次先按“资料仍不完整，需要补充更明确说明后重提”驳回，并保留原因给员工补资料。`,
+    rows: [
+      ...item.rows.slice(0, 3),
+      { label: '驳回原因', value: '资料仍不完整，需要补充更明确说明后重提', valueTone: 'text-red-700 font-semibold' },
+    ],
+  };
+}
+
+function ApprovalCard({
+  item,
+  pending,
+  onReject,
+  onApprove,
+  onView,
+}: {
+  item: ApprovalItem;
+  pending: boolean;
+  onReject: (item: ApprovalItem) => void;
+  onApprove: (item: ApprovalItem) => void;
+  onView: (item: ApprovalItem) => void;
+}) {
   const impactChips = getImpactChips(item, pending);
 
   return (
@@ -340,15 +386,15 @@ function ApprovalCard({ item, pending }: { item: ApprovalItem; pending: boolean 
       <div className="flex border-t border-white/70 bg-white/70">
         {pending ? (
           <>
-            <button className="flex-1 border-r border-slate-200 py-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50">
+            <button type="button" onClick={() => onReject(item)} className="flex-1 border-r border-slate-200 py-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50">
               驳回
             </button>
-            <button className="flex-1 py-3 text-sm font-medium text-blue-600 transition hover:bg-blue-50">
+            <button type="button" onClick={() => onApprove(item)} className="flex-1 py-3 text-sm font-medium text-blue-600 transition hover:bg-blue-50">
               同意并回写
             </button>
           </>
         ) : (
-          <button className="inline-flex flex-1 items-center justify-center py-3 text-sm font-medium text-blue-600 transition hover:bg-blue-50">
+          <button type="button" onClick={() => onView(item)} className="inline-flex flex-1 items-center justify-center py-3 text-sm font-medium text-blue-600 transition hover:bg-blue-50">
             查看同步结果
             <ArrowRight className="ml-1 h-4 w-4" />
           </button>
@@ -358,24 +404,123 @@ function ApprovalCard({ item, pending }: { item: ApprovalItem; pending: boolean 
   );
 }
 
+
 export default function ManagerApproval() {
   const [activeTab, setActiveTab] = useState<ApprovalTab>('pending');
   const [activeFilter, setActiveFilter] = useState<ApprovalFilter>('all');
   const [showReminderPreview, setShowReminderPreview] = useState(true);
+  const [pendingList, setPendingList] = useState<ApprovalItem[]>(pendingApprovals);
+  const [processedList, setProcessedList] = useState<ApprovalItem[]>(processedApprovals);
+  const [actionMessage, setActionMessage] = useState('');
+  const [detailItem, setDetailItem] = useState<ApprovalItem | null>(null);
 
   const currentList = useMemo(() => {
-    const source = activeTab === 'pending' ? pendingApprovals : activeTab === 'processed' ? processedApprovals : mineApprovals;
+    const source = activeTab === 'pending' ? pendingList : activeTab === 'processed' ? processedList : mineApprovals;
 
     if (activeFilter === 'all') {
       return source;
     }
 
     return source.filter((item) => item.kind === activeFilter);
-  }, [activeFilter, activeTab]);
+  }, [activeFilter, activeTab, pendingList, processedList]);
+
+  const handleApprove = (item: ApprovalItem) => {
+    const nextItem = buildApprovedItem(item);
+    setPendingList((current) => current.filter((currentItem) => getApprovalKey(currentItem) !== getApprovalKey(item)));
+    setProcessedList((current) => [nextItem, ...current]);
+    setDetailItem(nextItem);
+    setActionMessage(`${item.applicant} 的${item.kindLabel}已通过，结果已同步回写到异常中心、团队月报和日志中心。`);
+  };
+
+  const handleReject = (item: ApprovalItem) => {
+    const nextItem = buildRejectedItem(item);
+    setPendingList((current) => current.filter((currentItem) => getApprovalKey(currentItem) !== getApprovalKey(item)));
+    setProcessedList((current) => [nextItem, ...current]);
+    setDetailItem(nextItem);
+    setActionMessage(`${item.applicant} 的${item.kindLabel}已驳回，原因已保留，员工可补充资料后重新提交。`);
+  };
+
+  const handleView = (item: ApprovalItem) => {
+    setDetailItem(item);
+  };
+
+  const handleProcessReminder = () => {
+    setActiveTab('pending');
+    setActiveFilter('all');
+    setShowReminderPreview(false);
+    setActionMessage('已切回待审批列表，请优先处理超时审批和未排班提醒。');
+  };
+
+  const handleBatchProcess = () => {
+    if (activeTab !== 'pending') {
+      setActiveTab('pending');
+      setActionMessage('已切换到待审批列表，可继续批量处理当前筛选结果。');
+      return;
+    }
+
+    if (currentList.length === 0) {
+      setActionMessage('当前筛选下没有可批量处理的待审批记录。');
+      return;
+    }
+
+    const currentKeys = new Set(currentList.map((item) => getApprovalKey(item)));
+    const approvedItems = currentList.map((item) => buildApprovedItem(item));
+
+    setPendingList((current) => current.filter((item) => !currentKeys.has(getApprovalKey(item))));
+    setProcessedList((current) => [...approvedItems, ...current]);
+    setActionMessage(`已批量通过 ${approvedItems.length} 条当前筛选记录，并同步回写到异常中心与月报。`);
+  };
 
   return (
     <>
+      {detailItem ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/35 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-[28px] border border-white/70 bg-white p-5 shadow-[0_24px_60px_rgba(15,23,42,0.24)]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-blue-600">审批回写结果</p>
+                <h2 className="mt-2 text-lg font-semibold text-slate-900">{detailItem.applicant} · {detailItem.kindLabel}</h2>
+                <p className="mt-1 text-sm text-slate-500">{detailItem.department} · {detailItem.status}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetailItem(null)}
+                className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-500 transition hover:bg-slate-50"
+              >
+                关闭
+              </button>
+            </div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                <p className="font-semibold text-slate-900">同步摘要</p>
+                <p className="mt-2 leading-6">{detailItem.sync}</p>
+                <p className="mt-2 leading-6">{detailItem.note}</p>
+              </div>
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+                <p className="font-semibold">影响范围</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {getImpactChips(detailItem, false).map((chip) => (
+                    <span key={chip} className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-700">
+                      {chip}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {detailItem.rows.map((row) => (
+                <div key={row.label} className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{row.label}</p>
+                  <p className={clsx('mt-2 leading-6', row.valueTone)}>{row.value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {showReminderPreview ? (
+
         <div className="pointer-events-none fixed right-6 top-24 z-30 hidden w-80 xl:block">
           <div className="pointer-events-auto rounded-[28px] border border-white/70 bg-white p-5 shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
             <div className="flex items-start justify-between gap-3">
@@ -406,9 +551,10 @@ export default function ManagerApproval() {
                 </div>
               ))}
             </div>
-            <button className="mt-4 w-full rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700">
+            <button type="button" onClick={handleProcessReminder} className="mt-4 w-full rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700">
               立即处理
             </button>
+
           </div>
         </div>
       ) : null}
@@ -419,7 +565,8 @@ export default function ManagerApproval() {
             <h1 className="text-lg font-semibold text-gray-900">审批中心</h1>
             <p className="mt-1 text-xs text-gray-500">日常审批优先由主管处理，结果自动同步到异常和月报。</p>
           </div>
-          <button className="text-sm font-medium text-blue-600">批量处理</button>
+          <button type="button" onClick={handleBatchProcess} className="text-sm font-medium text-blue-600">批量处理</button>
+
         </div>
 
         <div className="flex border-b border-gray-100">
@@ -429,8 +576,9 @@ export default function ManagerApproval() {
           >
             待审批
             <span className="ml-1 inline-flex items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-xs font-bold leading-none text-red-100">
-              4
+              {pendingList.length}
             </span>
+
           </button>
           <button
             onClick={() => setActiveTab('processed')}
@@ -466,10 +614,21 @@ export default function ManagerApproval() {
                 <X className="h-4 w-4" />
               </button>
             </div>
+            <button type="button" onClick={handleProcessReminder} className="mt-4 w-full rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700">
+              立即处理
+            </button>
+          </section>
+        ) : null}
+
+        {actionMessage ? (
+          <section className="rounded-3xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900 shadow-sm">
+            <p className="font-semibold">操作已完成</p>
+            <p className="mt-2 leading-6">{actionMessage}</p>
           </section>
         ) : null}
 
         <section className="rounded-3xl border border-blue-100 bg-blue-50 p-4 shadow-sm">
+
           <div className="flex items-start gap-3 text-blue-900">
             <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
             <div>
@@ -588,13 +747,23 @@ export default function ManagerApproval() {
 
         <section className="space-y-3">
           {currentList.length > 0 ? (
-            currentList.map((item) => <ApprovalCard key={`${activeTab}-${item.applicant}-${item.kindLabel}`} item={item} pending={activeTab === 'pending'} />)
+            currentList.map((item) => (
+              <ApprovalCard
+                key={`${activeTab}-${item.applicant}-${item.kindLabel}`}
+                item={item}
+                pending={activeTab === 'pending'}
+                onReject={handleReject}
+                onApprove={handleApprove}
+                onView={handleView}
+              />
+            ))
           ) : (
             <div className="rounded-3xl border border-dashed border-slate-200 bg-white px-4 py-12 text-center text-sm text-slate-400 shadow-sm">
               当前筛选下暂无记录
             </div>
           )}
         </section>
+
 
         <section className="grid gap-4 xl:grid-cols-2">
           <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
