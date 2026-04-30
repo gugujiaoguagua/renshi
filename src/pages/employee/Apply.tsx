@@ -1,24 +1,26 @@
-import { useState } from 'react';
-
-import { AlertCircle, ArrowRight, Briefcase, Calendar, CheckSquare, Clock, FileText, MapPin, Plane, RefreshCw } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import {
+  ArrowRight,
+  Briefcase,
+  Calendar,
+  Clock3,
+  FileText,
+  Plane,
+  RefreshCw,
+} from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 
-type ApplyType = 'leave' | 'trip' | 'outing' | 'shift';
-
-type SceneValidationConfig = {
-  title: string;
-  description: string;
-  cases: Array<{
-    scene: string;
-    result: string;
-    note: string;
-    tone: string;
-  }>;
-  evidence: string[];
-  fallback: string[];
-};
+type ApplyType = 'reissue' | 'leave' | 'trip' | 'outing' | 'shift';
 
 const applyCards = [
+  {
+    id: 'reissue' as const,
+    title: '补卡申请',
+    desc: '缺卡、迟到、早退等异常先补卡说明，再进入主管审批与回写。',
+    icon: Clock3,
+    tone: 'border-blue-100 bg-blue-50 text-blue-900',
+    activeTone: 'border-blue-300 ring-2 ring-blue-100 bg-blue-50',
+  },
   {
     id: 'leave' as const,
     title: '请假申请',
@@ -53,30 +55,6 @@ const applyCards = [
   },
 ];
 
-const recentItems = [
-  {
-    title: '武汉出差申请',
-    detail: '2026-04-28 至 2026-04-30 · 等待主管审批',
-    status: '审批中',
-    tone: 'bg-amber-50 text-amber-700',
-    next: '今天 18:00 前预计给出审批结果，可先撤回修改行程。',
-  },
-  {
-    title: '4 月 24 日外勤说明',
-    detail: '客户现场定位已提交，已同步异常中心',
-    status: '已通过',
-    tone: 'bg-emerald-50 text-emerald-700',
-    next: '结果已回写记录页和月报，不需要再单独补解释。',
-  },
-  {
-    title: '门店晚班自选排班',
-    detail: '因店长未及时排班，已选择 14:00 - 22:00 班次',
-    status: '待确认',
-    tone: 'bg-blue-50 text-blue-700',
-    next: '店长确认后会自动修正当日异常，不必月底再人工说明。',
-  },
-];
-
 const draftConfigs: Record<ApplyType, {
   eyebrow: string;
   title: string;
@@ -87,6 +65,29 @@ const draftConfigs: Record<ApplyType, {
   syncNotes: string[];
   afterSubmit: { title: string; desc: string }[];
 }> = {
+  reissue: {
+    eyebrow: '补卡申请草稿',
+    title: '先补卡说明，再进入主管审批与回写',
+    description: '从打卡记录里的异常日进入后，直接落到补卡申请卡片，先把时间、班次和原因补齐，再同步给主管审批。',
+    submitText: '提交补卡说明',
+    fields: [
+      { label: '补卡日期', value: '2026-04-26', hint: '默认带入当前异常日，避免重复选择。' },
+      { label: '补卡班次', value: '上班未打卡', hint: '按当天异常结果自动识别，可继续修改。' },
+      { label: '补卡时间', value: '2026-04-26 09:00', hint: '建议填实际到岗时间，便于主管核对。' },
+      { label: '审批人', value: '直属主管 · 张建国', hint: '先走直属主管审批，再同步异常中心和月报。' },
+    ],
+    flow: ['员工提交补卡说明', '直属主管审批', '结果回写记录页 / 异常中心', '月底进入月度确认'],
+    syncNotes: [
+      '补卡申请通过后，会同步更新打卡记录、异常中心和月报口径。',
+      '无故补卡或说明不完整时，主管可驳回并要求补充资料后重提。',
+      '建议在异常当天就补卡说明，避免月底集中追补。',
+    ],
+    afterSubmit: [
+      { title: '优先回写记录页', desc: '审批通过后，记录页当天状态会优先更新。' },
+      { title: '异常中心同步关闭', desc: '补卡通过后，同步减少对应异常提醒。' },
+      { title: '月底仍可复核', desc: '即使已通过，月底确认页仍能继续查看留痕。' },
+    ],
+  },
   leave: {
     eyebrow: '请假提单草稿',
     title: '请假优先走主管审批，不建议月底再补解释',
@@ -181,122 +182,139 @@ const draftConfigs: Record<ApplyType, {
   },
 };
 
-const sceneValidationConfigs: Partial<Record<ApplyType, SceneValidationConfig>> = {
-  trip: {
-    title: '出差场景校验',
-    description: '把“酒店不算、客户现场才算”这类判断直接做成可见规则，主管审批时不再只靠口头理解。',
-    cases: [
-      {
-        scene: '客户门店 / 经销商现场',
-        result: '优先通过',
-        note: '定位落在客户门店、展厅、经销商办公点，并附现场照片时，可直接按出差口径处理。',
-        tone: 'border-emerald-100 bg-emerald-50 text-emerald-900',
-      },
-      {
-        scene: '高铁站 / 机场 / 转场途中',
-        result: '需补充行程说明',
-        note: '可作为过渡证据，但不能单独替代客户现场，需要补充行程单或后续现场记录。',
-        tone: 'border-amber-100 bg-amber-50 text-amber-900',
-      },
-      {
-        scene: '酒店 / 宾馆 / 住处周边',
-        result: '默认不通过',
-        note: '仅有酒店定位不足以证明实际工作场景，需要补充客户现场或门店证据后再审批。',
-        tone: 'border-red-100 bg-red-50 text-red-900',
-      },
-    ],
-    evidence: ['客户或门店名称', '现场照片', '当日计划 / 拜访说明', '必要时补充行程凭证'],
-    fallback: ['证据不足先驳回并保留原因', '可补资料后二次提交', '审批通过后同步记录页、月报和异常口径'],
-  },
-  outing: {
-    title: '外勤 / 外出场景校验',
-    description: '把临时外出和客户拜访拆成清晰判断标准，避免月底只看到一条定位而看不懂业务背景。',
-    cases: [
-      {
-        scene: '客户现场 / 门店支援 / 园区拜访',
-        result: '按外勤口径',
-        note: '有明确业务对象和时间段时，可直接作为合法外勤，不再计缺卡。',
-        tone: 'border-emerald-100 bg-emerald-50 text-emerald-900',
-      },
-      {
-        scene: '商场 / 社区 / 园区周边',
-        result: '需补业务说明',
-        note: '定位可能合理，但必须写清客户对象、门店名称或支援任务，否则主管难以判断。',
-        tone: 'border-amber-100 bg-amber-50 text-amber-900',
-      },
-      {
-        scene: '酒店 / 餐饮 / 非业务地点',
-        result: '默认二次核验',
-        note: '非业务场景需要补充照片、联系人或任务说明，否则不能直接覆盖异常。',
-        tone: 'border-red-100 bg-red-50 text-red-900',
-      },
-    ],
-    evidence: ['外出对象 / 门店名称', '地点说明', '必要时附现场照片', '返回时间或处理结果'],
-    fallback: ['主管可先要求补资料', '考勤组允许免审批时仍保留留痕', '通过后覆盖外出时段内异常结果'],
-  },
+type DraftState = Record<ApplyType, { fields: Record<string, string>; note: string }>;
+type SubmissionStatus = '草稿' | '待主管审批';
+
+type SubmissionItem = {
+  id: string;
+  type: ApplyType;
+  typeTitle: string;
+  status: SubmissionStatus;
+  submittedAt: string;
+  fields: Record<string, string>;
+  note: string;
 };
 
-const collisionRules = [
-  {
-    title: '出差中途请假',
-    result: '请假优先覆盖对应天数',
-    desc: '员工不需要把原出差拆成多张单，只要请假审批通过，系统自动覆盖那几天的出差口径。',
-    tone: 'border-blue-100 bg-blue-50 text-blue-900',
-  },
-  {
-    title: '请假后又来上班并打卡',
-    result: '有效打卡优先',
-    desc: '如果员工当天实际到岗并完成有效打卡，就按真实出勤回写，不让整天请假覆盖实际工作。',
-    tone: 'border-emerald-100 bg-emerald-50 text-emerald-900',
-  },
-  {
-    title: '未排班先自选班次',
-    result: '先保住班次，再做主管确认',
-    desc: '避免门店当天无班次就直接判缺卡；员工先提班次，店长后确认，结果再统一回写。',
-    tone: 'border-purple-100 bg-purple-50 text-purple-900',
-  },
-];
+function createInitialDraftState(): DraftState {
+  return applyCards.reduce((acc, card) => {
+    const config = draftConfigs[card.id];
+    const fields = config.fields.reduce<Record<string, string>>((fieldAcc, field) => {
+      fieldAcc[field.label] = field.value;
+      return fieldAcc;
+    }, {});
+
+    acc[card.id] = { fields, note: '' };
+    return acc;
+  }, {} as DraftState);
+}
 
 export default function EmployeeApply() {
   const [searchParams, setSearchParams] = useSearchParams();
   const searchType = searchParams.get('type');
   const activeType = applyCards.some((item) => item.id === searchType) ? (searchType as ApplyType) : 'leave';
-  const [submitMessage, setSubmitMessage] = useState('');
 
-  const handleTypeChange = (type: ApplyType) => {
-    setSubmitMessage('');
-    setSearchParams(type === 'leave' ? {} : { type });
-  };
+  const [draftState, setDraftState] = useState<DraftState>(() => createInitialDraftState());
+  const [submissions, setSubmissions] = useState<SubmissionItem[]>([]);
+  const [editingSubmissionId, setEditingSubmissionId] = useState<string | null>(null);
+  const [submitMessage, setSubmitMessage] = useState('');
 
   const activeCard = applyCards.find((item) => item.id === activeType) ?? applyCards[0];
   const draft = draftConfigs[activeType];
-  const sceneValidation = sceneValidationConfigs[activeType];
+  const activeDraft = draftState[activeType];
 
-  const handleSubmit = () => {
-    setSubmitMessage(`${draft.submitText} 已提交，当前草稿会进入主管审批，并同步回写异常中心 / 月报口径。`);
+  const submissionsOfActiveType = useMemo(
+    () => submissions.filter((item) => item.type === activeType),
+    [activeType, submissions],
+  );
+
+  const handleTypeChange = (type: ApplyType) => {
+    setSubmitMessage('');
+    setEditingSubmissionId(null);
+    setSearchParams(type === 'leave' ? {} : { type });
   };
 
+  const handleFieldChange = (label: string, value: string) => {
+    setDraftState((current) => ({
+      ...current,
+      [activeType]: {
+        ...current[activeType],
+        fields: {
+          ...current[activeType].fields,
+          [label]: value,
+        },
+      },
+    }));
+  };
 
+  const handleNoteChange = (value: string) => {
+    setDraftState((current) => ({
+      ...current,
+      [activeType]: {
+        ...current[activeType],
+        note: value,
+      },
+    }));
+  };
+
+  const upsertSubmission = (status: SubmissionStatus) => {
+    const nowText = new Date().toLocaleString('zh-CN', { hour12: false });
+    const basePayload: Omit<SubmissionItem, 'id'> = {
+      type: activeType,
+      typeTitle: activeCard.title,
+      status,
+      submittedAt: nowText,
+      fields: { ...activeDraft.fields },
+      note: activeDraft.note,
+    };
+
+    if (editingSubmissionId) {
+      const updatedId = editingSubmissionId;
+      setSubmissions((current) =>
+        current.map((item) => (item.id === updatedId ? { ...item, ...basePayload, id: updatedId } : item)),
+      );
+      setSubmitMessage(`已更新 ${activeCard.title}（单号 ${updatedId}），当前状态：${status}。`);
+      setEditingSubmissionId(null);
+      return;
+    }
+
+    const id = `AP-${Date.now().toString().slice(-8)}`;
+    const newSubmission: SubmissionItem = { id, ...basePayload };
+    setSubmissions((current) => [newSubmission, ...current]);
+    setSubmitMessage(`已创建 ${activeCard.title}（单号 ${id}），当前状态：${status}。`);
+  };
+
+  const handleSaveDraft = () => {
+    upsertSubmission('草稿');
+  };
+
+  const handleSubmit = () => {
+    upsertSubmission('待主管审批');
+  };
+
+  const handleEditSubmission = (target: SubmissionItem) => {
+    setSearchParams(target.type === 'leave' ? {} : { type: target.type });
+    setDraftState((current) => ({
+      ...current,
+      [target.type]: {
+        fields: { ...target.fields },
+        note: target.note,
+      },
+    }));
+    setEditingSubmissionId(target.id);
+    setSubmitMessage(`已载入单号 ${target.id}，你可以继续修改后保存或提交。`);
+  };
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[28px] bg-gradient-to-br from-slate-900 via-slate-800 to-slate-700 p-5 text-white shadow-[0_18px_40px_rgba(15,23,42,0.18)]">
-        <p className="text-sm text-slate-300">员工申请中心</p>
-        <h1 className="mt-2 text-2xl font-semibold">请假、出差、外出和调班统一在这里提单</h1>
-        <p className="mt-3 text-sm leading-6 text-slate-200">
-          第二阶段沟通里提到的请假、出差、外出、调班和自选排班入口，现在不只保留入口，也补上了提单内容层、场景校验和审批同步说明。
-        </p>
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-2">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         {applyCards.map((item) => {
           const isActive = item.id === activeType;
 
           return (
             <button
               key={item.title}
+              type="button"
               onClick={() => handleTypeChange(item.id)}
-
               className={`rounded-3xl border p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${isActive ? item.activeTone : item.tone}`}
             >
               <div className="flex items-start justify-between gap-3">
@@ -318,7 +336,7 @@ export default function EmployeeApply() {
         })}
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
+      <section className="mt-6">
         <div className="space-y-4">
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
@@ -335,17 +353,32 @@ export default function EmployeeApply() {
             <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
               <span className="rounded-full bg-slate-100 px-3 py-1">审批人：直属主管</span>
               <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">回写：异常中心 / 月报</span>
-              <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">手机端先提单，再做后续处理</span>
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">当前类型：{activeCard.title}</span>
             </div>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               {draft.fields.map((field) => (
                 <div key={field.label} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                  <p className="text-sm text-slate-500">{field.label}</p>
-                  <p className="mt-2 text-sm font-semibold text-slate-900">{field.value}</p>
+                  <label className="text-sm text-slate-500">{field.label}</label>
+                  <input
+                    value={activeDraft.fields[field.label] ?? ''}
+                    onChange={(event) => handleFieldChange(field.label, event.target.value)}
+                    className="mt-2 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
                   <p className="mt-2 text-xs leading-5 text-slate-500">{field.hint}</p>
                 </div>
               ))}
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <label className="text-sm font-medium text-slate-700">补充说明</label>
+              <textarea
+                value={activeDraft.note}
+                onChange={(event) => handleNoteChange(event.target.value)}
+                rows={3}
+                placeholder="可补充审批背景、临时调整原因、地点说明等"
+                className="mt-2 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
             </div>
 
             <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4">
@@ -365,177 +398,65 @@ export default function EmployeeApply() {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleSubmit}
-              className="mt-5 inline-flex w-full items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
-            >
-              {draft.submitText}
-            </button>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={handleSaveDraft}
+                className="inline-flex w-full items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                保存草稿
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmit}
+                className="inline-flex w-full items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
+              >
+                {editingSubmissionId ? `更新并提交（${editingSubmissionId}）` : draft.submitText}
+              </button>
+            </div>
 
             {submitMessage ? (
               <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm leading-6 text-emerald-900">
-                <p className="font-semibold">提交成功</p>
+                <p className="font-semibold">操作成功</p>
                 <p className="mt-2">{submitMessage}</p>
               </div>
             ) : null}
           </div>
 
-          <div className="rounded-3xl border border-amber-100 bg-amber-50 p-5 shadow-sm">
-            <div className="flex items-start gap-3 text-amber-900">
-              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-              <div>
-                <h2 className="text-sm font-semibold">审批与月报同步规则</h2>
-                <div className="mt-3 space-y-3 text-sm leading-6 text-amber-800">
-                  {draft.syncNotes.map((item) => (
-                    <div key={item} className="rounded-2xl bg-white/70 p-4">
-                      {item}
-                    </div>
-                  ))}
-                </div>
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-lg font-semibold text-slate-900">最近提单记录（{activeCard.title}）</h3>
+            <p className="mt-1 text-sm text-slate-500">点击“继续编辑”可把历史单据加载回表单，继续修改后再提交。</p>
+
+            {submissionsOfActiveType.length === 0 ? (
+              <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                当前类型还没有提单记录，先填写上面的字段并点击“保存草稿”或“提交”。
               </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2 text-slate-900">
-              <FileText className="h-5 w-5 text-blue-600" />
-              <h2 className="text-lg font-semibold">最近申请记录</h2>
-            </div>
-            <div className="mt-4 space-y-3">
-              {recentItems.map((item) => (
-                <div key={item.title} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-                      <p className="mt-1 text-sm leading-6 text-slate-500">{item.detail}</p>
-                      <p className="mt-2 text-xs leading-5 text-slate-400">{item.next}</p>
-                    </div>
-                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${item.tone}`}>
-                      {item.status}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2 text-slate-900">
-              <CheckSquare className="h-5 w-5 text-emerald-600" />
-              <h2 className="text-lg font-semibold">提交后会发生什么</h2>
-            </div>
-            <div className="mt-4 space-y-3 text-sm text-slate-600">
-              {draft.afterSubmit.map((item) => (
-                <div key={item.title} className="rounded-2xl bg-slate-50 p-4">
-                  <p className="font-semibold text-slate-900">{item.title}</p>
-                  <p className="mt-2 leading-6 text-slate-500">{item.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2 text-slate-900">
-              <CheckSquare className="h-5 w-5 text-emerald-600" />
-              <h2 className="text-lg font-semibold">提单说明</h2>
-            </div>
-            <div className="mt-4 space-y-3 text-sm text-slate-600">
-              <div className="rounded-2xl bg-slate-50 p-4">请假、出差、外出、调班统一走主管审批，不把日常审批直接压给人事。</div>
-              <div className="rounded-2xl bg-slate-50 p-4">主管审批后会同步异常中心、记录页和月报结果，月底再统一确认。</div>
-              <div className="rounded-2xl bg-slate-50 p-4">如果门店当天未排班，可先发起自选排班，避免直接被判缺卡或迟到。</div>
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2 text-slate-900">
-              <Clock className="h-5 w-5 text-slate-500" />
-              <h2 className="text-lg font-semibold">处理节奏建议</h2>
-            </div>
-            <div className="mt-4 space-y-3 text-sm text-slate-600">
-              <div className="rounded-2xl bg-slate-50 p-4">当天知道自己要请假 / 出差时，尽量在打卡前完成提单。</div>
-              <div className="rounded-2xl bg-slate-50 p-4">外勤 / 出差建议同时附带地点和业务说明，主管会更快确认。</div>
-              <div className="rounded-2xl bg-slate-50 p-4">月底前把审批中的单据清完，避免影响月度结果确认和主管月报。</div>
-            </div>
-          </div>
-
-          {sceneValidation ? (
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-2 text-slate-900">
-                <MapPin className="h-5 w-5 text-blue-600" />
-                <h2 className="text-lg font-semibold">{sceneValidation.title}</h2>
-              </div>
-              <p className="mt-3 text-sm leading-6 text-slate-500">{sceneValidation.description}</p>
-
+            ) : (
               <div className="mt-4 space-y-3">
-                {sceneValidation.cases.map((item) => (
-                  <div key={item.scene} className={`rounded-2xl border p-4 ${item.tone}`}>
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-semibold">{item.scene}</p>
-                      <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold">{item.result}</span>
+                {submissionsOfActiveType.map((item) => (
+                  <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{item.id}</p>
+                        <p className="mt-1 text-xs text-slate-500">{item.submittedAt}</p>
+                      </div>
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${item.status === '待主管审批' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-700'}`}>
+                        {item.status}
+                      </span>
                     </div>
-                    <p className="mt-3 text-sm leading-6 opacity-90">{item.note}</p>
+                    <p className="mt-3 text-sm text-slate-600">{Object.entries(item.fields).slice(0, 2).map((entry) => `${entry[0]}：${entry[1]}`).join('；')}</p>
+                    {item.note ? <p className="mt-2 text-xs text-slate-500">备注：{item.note}</p> : null}
+                    <button
+                      type="button"
+                      onClick={() => handleEditSubmission(item)}
+                      className="mt-3 inline-flex items-center rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                    >
+                      继续编辑
+                    </button>
                   </div>
                 ))}
               </div>
-
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <p className="text-sm font-semibold text-slate-900">建议提交的证据</p>
-                  <div className="mt-3 space-y-2 text-sm text-slate-600">
-                    {sceneValidation.evidence.map((item) => (
-                      <div key={item} className="rounded-2xl bg-white px-3 py-2">
-                        {item}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="rounded-2xl bg-slate-50 p-4">
-                  <p className="text-sm font-semibold text-slate-900">证据不足时怎么处理</p>
-                  <div className="mt-3 space-y-2 text-sm text-slate-600">
-                    {sceneValidation.fallback.map((item) => (
-                      <div key={item} className="rounded-2xl bg-white px-3 py-2">
-                        {item}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-2 text-slate-900">
-                <MapPin className="h-5 w-5 text-blue-600" />
-                <h2 className="text-lg font-semibold">定位 / 说明补充</h2>
-              </div>
-              <div className="mt-4 space-y-3 text-sm text-slate-600">
-                <div className="rounded-2xl bg-slate-50 p-4">出差和外勤场景建议附带定位、现场照片或业务地点说明，方便主管判断是否符合要求。</div>
-                <div className="rounded-2xl bg-slate-50 p-4">后续真正接入企业微信审批或第三方审批流时，这里的字段也可以直接映射过去。</div>
-              </div>
-            </div>
-          )}
-
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2 text-slate-900">
-              <AlertCircle className="h-5 w-5 text-amber-600" />
-              <h2 className="text-lg font-semibold">交叉场景优先级</h2>
-            </div>
-            <p className="mt-3 text-sm leading-6 text-slate-500">
-              把二阶段沟通里最容易引起争议的几种场景直接写成可见规则，员工和主管都能在提单时先看到处理口径。
-            </p>
-            <div className="mt-4 space-y-3">
-              {collisionRules.map((item) => (
-                <div key={item.title} className={`rounded-2xl border p-4 ${item.tone}`}>
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold">{item.title}</p>
-                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold">{item.result}</span>
-                  </div>
-                  <p className="mt-3 text-sm leading-6 opacity-90">{item.desc}</p>
-                </div>
-              ))}
-            </div>
+            )}
           </div>
         </div>
       </section>

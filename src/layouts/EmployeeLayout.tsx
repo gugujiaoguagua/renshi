@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Home, Clock, AlertCircle, User } from 'lucide-react';
+import { Home, Clock, AlertCircle } from 'lucide-react';
 import { clsx } from 'clsx';
 import RoleSwitchMenu from '../components/RoleSwitchMenu';
 
@@ -17,7 +17,6 @@ const navItems: NavItem[] = [
   { name: '首页打卡', mobileName: '打卡', path: '/employee/home', icon: Home, desc: '先完成今日打卡，再处理异常' },
   { name: '打卡记录', mobileName: '记录', path: '/employee/records', icon: Clock, desc: '查看最近出勤记录与时间点' },
   { name: '异常处理', mobileName: '异常', path: '/employee/exceptions', icon: AlertCircle, desc: '补卡、申诉与月底确认', badge: '1' },
-  { name: '个人中心', mobileName: '我的', path: '/employee/profile', icon: User, desc: '查看个人资料与账号信息' },
 ];
 
 export default function EmployeeLayout() {
@@ -86,12 +85,6 @@ export default function EmployeeLayout() {
               );
             })}
           </nav>
-
-          <div className="mt-auto rounded-3xl bg-slate-900 p-4 text-white shadow-[0_18px_40px_rgba(15,23,42,0.18)]">
-            <p className="text-xs uppercase tracking-[0.24em] text-blue-200">当前焦点</p>
-            <h3 className="mt-3 text-lg font-semibold">先打卡，再补异常</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-300">今天还有 1 条缺卡待处理，建议完成打卡后直接进入异常页补充说明。</p>
-          </div>
         </aside>
 
         <main className="min-w-0 flex-1 overflow-y-auto bg-slate-100">

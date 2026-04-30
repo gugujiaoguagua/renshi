@@ -1,18 +1,21 @@
 import { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, Clock, Calendar, AlertCircle, FileClock, Bell } from 'lucide-react';
+import { LayoutDashboard, Users, Clock, Calendar, AlertCircle, FileClock, Bell, Clock3 } from 'lucide-react';
+
 import { clsx } from 'clsx';
 import RoleSwitchMenu from '../components/RoleSwitchMenu';
 
 
 const navItems = [
   { name: '工作台', path: '/admin/dashboard', icon: LayoutDashboard, desc: '总览月报、异常与待处理事项' },
-  { name: '组织与人员', path: '/admin/organization', icon: Users, desc: '维护组织关系与员工归属' },
-  { name: '班次与规则', path: '/admin/rules', icon: Clock, desc: '统一配置班次、打卡与判定规则' },
-  { name: '排班管理', path: '/admin/schedule', icon: Calendar, desc: '查看全局排班质量与缺失情况' },
+  { name: '我的打卡记录', path: '/admin/records', icon: Clock3, desc: '像员工一样按日历查看人事本人的每日打卡结果' },
+  { name: '月报中心', path: '/admin/rules', icon: Clock, desc: '统一汇总月报结果并支持筛选导出' },
   { name: '异常中心', path: '/admin/exceptions', icon: AlertCircle, desc: '集中处理异常、补卡与待确认记录' },
+  { name: '组织与人员', path: '/admin/organization', icon: Users, desc: '维护组织关系与员工归属' },
+  { name: '排班管理', path: '/admin/schedule', icon: Calendar, desc: '查看全局排班质量与缺失情况' },
   { name: '日志中心', path: '/admin/logs', icon: FileClock, desc: '追溯规则调整、审批与人工修正' },
 ];
+
 
 const layoutNotifications = [
   { title: '异常中心仍有 3 条高风险记录', detail: '建议优先处理迟到 45 分钟和补卡超时两类记录。', tone: 'border-red-100 bg-red-50 text-red-900' },
@@ -120,9 +123,31 @@ export default function AdminLayout() {
           </div>
         </header>
 
-        <div className="px-4 py-4 md:px-6 md:py-6">
+        <div className="px-4 py-4 pb-24 md:px-6 md:py-6 md:pb-6">
           <Outlet />
         </div>
+
+        {/* 仅移动端：人事端底部导航（不影响其他角色/桌面端布局） */}
+        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur md:hidden">
+          <div className="mx-auto grid max-w-3xl grid-cols-4">
+            {navItems.slice(0, 4).map((item) => {
+              const active = location.pathname.startsWith(item.path);
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={clsx(
+                    'flex flex-col items-center justify-center gap-1 px-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 text-xs font-medium transition',
+                    active ? 'text-blue-600' : 'text-gray-400',
+                  )}
+                >
+                  <item.icon className="h-5 w-5" />
+                  <span>{item.name}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
       </main>
     </div>
   );

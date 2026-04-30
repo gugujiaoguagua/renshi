@@ -1,215 +1,357 @@
 import { useMemo, useState } from 'react';
-import { AlertTriangle, ArrowRight, Calendar, CheckSquare, Clock, Filter, Search } from 'lucide-react';
+import { Download, RotateCcw, Search } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-const filters = ['全部异常', '缺卡', '迟到', '待沟通'] as const;
-type FilterType = (typeof filters)[number];
+import { managerExceptionInsights } from '../../data/attendanceInsights';
+import { downloadCsv } from '../../utils/downloadCsv';
 
-const teamExceptions = [
-  {
-    name: '张三',
-    department: '技术二组 · 前端开发',
-    type: '缺卡',
-    date: '2026-04-25',
-    detail: '昨天 18:00 下班缺卡，员工已提交说明，等待主管确认是否补卡。',
-    tone: 'border-red-100 bg-red-50 text-red-900',
-    actionText: '去审批',
-    actionTo: '/manager/approval',
-    urgent: true,
-  },
-  {
-    name: '李四',
-    department: '技术二组 · 测试工程师',
-    type: '迟到',
-    date: '2026-04-24',
-    detail: '今日上班 09:12 打卡，已迟到 12 分钟，需要判断是否纳入异常。',
-    tone: 'border-amber-100 bg-amber-50 text-amber-900',
-    actionText: '看规则',
-    actionTo: '/manager/approval',
-    urgent: true,
-  },
-  {
-    name: '王小明',
-    department: '技术二组 · 前端开发',
-    type: '待沟通',
-    date: '2026-04-26',
-    detail: '周六仍未排班，如不处理将影响本周异常口径与排班发布。',
-    tone: 'border-purple-100 bg-purple-50 text-purple-900',
-    actionText: '去排班',
-    actionTo: '/manager/schedule',
-    urgent: false,
-  },
-];
+type ExceptionItem = (typeof managerExceptionInsights.items)[number];
+type StatusFilter = '全部状态' | '待处理' | '已闭环';
 
-const quickStats = [
-  { label: '团队异常', value: '5 条', tone: 'text-red-600' },
-  { label: '待审批补卡', value: '3 条', tone: 'text-amber-600' },
-  { label: '未排班成员', value: '2 人', tone: 'text-purple-600' },
-  { label: '已闭环', value: '8 条', tone: 'text-emerald-600' },
-];
+const typeOptions = ['全部异常', ...Array.from(new Set(managerExceptionInsights.items.map((item) => item.type)))];
+
+function buildKey(item: ExceptionItem) {
+  return `${item.name}-${item.type}-${item.date}`;
+}
 
 export default function ManagerTeamExceptions() {
+  const [rows, setRows] = useState<ExceptionItem[]>(managerExceptionInsights.items);
   const [keyword, setKeyword] = useState('');
-  const [activeFilter, setActiveFilter] = useState<FilterType>('全部异常');
+  const [monthFilter, setMonthFilter] = useState('全部月份');
+  const [activeType, setActiveType] = useState('全部异常');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('全部状态');
   const [onlyUrgent, setOnlyUrgent] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [jumpPageInput, setJumpPageInput] = useState('');
+  const [actionMessage, setActionMessage] = useState('');
+  const [showExplosionAlert, setShowExplosionAlert] = useState(true);
 
-  const filteredList = useMemo(() => {
-    return teamExceptions.filter((item) => {
-      const matchKeyword =
-        !keyword ||
-        [item.name, item.department, item.type, item.detail].some((part) => part.toLowerCase().includes(keyword.toLowerCase()));
-      const matchFilter = activeFilter === '全部异常' || item.type === activeFilter;
-      const matchUrgent = !onlyUrgent || item.urgent;
-      return matchKeyword && matchFilter && matchUrgent;
-    });
-  }, [activeFilter, keyword, onlyUrgent]);
+  const urgentCount = rows.filter((item) => item.urgent).length;
+
+  const monthOptions = useMemo(() => {
+    return Array.from(new Set(rows.map((item) => item.date.slice(0, 7)))).sort((a, b) => (a < b ? 1 : -1));
+  }, [rows]);
+
+  const filteredRows = useMemo(() => {
+    const keywordText = keyword.trim().toLowerCase();
+
+    return rows
+      .filter((item) => monthFilter === '全部月份' || item.date.startsWith(monthFilter))
+      .filter((item) => activeType === '全部异常' || item.type === activeType)
+      .filter((item) => {
+        if (statusFilter === '全部状态') return true;
+        if (statusFilter === '待处理') return item.urgent;
+        return !item.urgent;
+      })
+      .filter((item) => !onlyUrgent || item.urgent)
+      .filter((item) => {
+        if (!keywordText) return true;
+        return [item.name, item.department, item.type, item.detail].some((part) => part.toLowerCase().includes(keywordText));
+      })
+      .sort((a, b) => {
+        if (a.urgent !== b.urgent) return Number(b.urgent) - Number(a.urgent);
+        return a.date < b.date ? 1 : -1;
+      });
+  }, [activeType, keyword, monthFilter, onlyUrgent, rows, statusFilter]);
+
+  const pageSize = 10;
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const currentRows = filteredRows.slice((safeCurrentPage - 1) * pageSize, safeCurrentPage * pageSize);
+
+  const handleRecalculate = () => {
+    const keywordText = keyword.trim() ? ` / 关键词：${keyword.trim()}` : '';
+    setActionMessage(`已按 ${monthFilter} / ${activeType} / ${statusFilter}${keywordText} 重新计算，共得到 ${filteredRows.length} 条团队异常。`);
+  };
+
+  const handleExport = () => {
+    downloadCsv(
+      '主管团队异常明细.csv',
+      ['姓名', '部门', '异常类型', '风险', '日期', '状态', '异常详情', '建议动作'],
+      filteredRows.map((item) => [
+        item.name,
+        item.department,
+        item.type,
+        item.urgent ? '高' : '低',
+        item.date,
+        item.urgent ? '待处理' : '已闭环',
+        item.detail,
+        item.actionText,
+      ]),
+    );
+    setActionMessage(`已导出 ${filteredRows.length} 条团队异常记录。`);
+  };
+
+  const handleCloseLoop = (target: ExceptionItem) => {
+    setRows((current) =>
+      current.map((item) =>
+        buildKey(item) === buildKey(target)
+          ? {
+              ...item,
+              urgent: false,
+              actionText: '已闭环',
+              detail: `${item.detail} 当前已完成主管闭环处理。`,
+            }
+          : item,
+      ),
+    );
+    setActionMessage(`${target.name} 的异常已标记闭环并刷新列表。`);
+  };
+
+  const handleJumpPage = () => {
+    const page = Number(jumpPageInput);
+    if (!Number.isFinite(page)) return;
+    const target = Math.min(totalPages, Math.max(1, Math.floor(page)));
+    setCurrentPage(target);
+    setJumpPageInput('');
+  };
 
   return (
     <>
-      <header className="sticky top-0 z-10 border-b border-white/60 bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.24em] text-red-500">团队异常明细</p>
-            <h1 className="mt-1 text-xl font-semibold text-gray-900">先把高风险异常逐条处理</h1>
+      {showExplosionAlert && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/45 px-4">
+          <div className="w-full max-w-md rounded-3xl border border-red-200 bg-white p-5 shadow-2xl">
+            <div className="inline-flex items-center rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">【爆红】异常提醒</div>
+            <p className="mt-4 text-base font-semibold text-slate-900">今日有 {urgentCount} 条高风险异常，请优先处理。</p>
+            <p className="mt-2 text-sm text-slate-500">建议先处理审批中、缺卡待确认与地点待核实异常。</p>
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowExplosionAlert(false)}
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+              >
+                我知道了
+              </button>
+            </div>
           </div>
-          <Link to="/manager/team" className="rounded-full bg-slate-100 px-3 py-2 text-xs font-medium text-gray-600 transition hover:bg-slate-200">
-            返回工作台
-          </Link>
         </div>
-      </header>
+      )}
 
-      <main className="space-y-4 p-4 pb-24">
-        <section className="rounded-[28px] bg-gradient-to-br from-red-500 via-rose-500 to-orange-500 p-5 text-white shadow-[0_20px_40px_rgba(244,63,94,0.25)]">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-xl">
-              <p className="text-sm text-red-50">今日异常概览</p>
-              <h2 className="mt-1 text-2xl font-semibold">有 2 条异常今天必须处理完</h2>
-              <p className="mt-2 text-sm leading-6 text-red-50/90">
-                这页承接工作台里的“团队异常”卡片，帮助主管从摘要直接进入成员级处理列表。
-              </p>
+      <div className="space-y-5 p-4 pb-20">
+        <section className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold text-gray-900">团队异常筛选与结果</h2>
+              <p className="mt-2 text-sm text-gray-500">支持按月份、异常类型、状态筛选，搜索后可直接导出。</p>
             </div>
-            <div className="rounded-3xl bg-white/15 px-4 py-3 text-sm text-white ring-1 ring-white/15">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4" />
-                今日高风险：缺卡 1 条、迟到 1 条
-              </div>
-              <div className="mt-2 flex items-center gap-2 text-red-50">
-                <Calendar className="h-4 w-4" />
-                建议在 18:00 前完成沟通与审批
-              </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="space-y-1 text-sm text-gray-500">
+                <span>月份</span>
+                <select
+                  value={monthFilter}
+                  onChange={(event) => {
+                    setMonthFilter(event.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-blue-300"
+                >
+                  <option value="全部月份">全部月份</option>
+                  {monthOptions.map((month) => (
+                    <option key={month} value={month}>{month}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1 text-sm text-gray-500">
+                <span>异常类型</span>
+                <select
+                  value={activeType}
+                  onChange={(event) => {
+                    setActiveType(event.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-blue-300"
+                >
+                  {typeOptions.map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1 text-sm text-gray-500">
+                <span>状态</span>
+                <select
+                  value={statusFilter}
+                  onChange={(event) => {
+                    setStatusFilter(event.target.value as StatusFilter);
+                    setCurrentPage(1);
+                  }}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-blue-300"
+                >
+                  <option value="全部状态">全部状态</option>
+                  <option value="待处理">待处理</option>
+                  <option value="已闭环">已闭环</option>
+                </select>
+              </label>
             </div>
           </div>
-        </section>
 
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {quickStats.map((item) => (
-            <div key={item.label} className="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm">
-              <p className="text-sm font-medium text-gray-500">{item.label}</p>
-              <p className={`mt-3 text-3xl font-semibold ${item.tone}`}>{item.value}</p>
+          <div className="mt-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleRecalculate}
+                className="inline-flex items-center rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                <RotateCcw className="mr-2 h-4 w-4" />
+                重新计算
+              </button>
+              <button
+                type="button"
+                onClick={handleExport}
+                className="inline-flex items-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                导出异常
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOnlyUrgent((current) => !current);
+                  setCurrentPage(1);
+                }}
+                className={`inline-flex items-center rounded-xl border px-4 py-2 text-sm font-semibold transition ${onlyUrgent ? 'border-red-200 bg-red-50 text-red-700' : 'border-slate-200 text-slate-700 hover:bg-slate-50'}`}
+              >
+                {onlyUrgent ? '仅看高风险中' : '仅看高风险'}
+              </button>
             </div>
-          ))}
-        </section>
 
-        <section className="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex flex-1 items-center gap-3 rounded-2xl border border-gray-200 bg-slate-50 px-4 py-3">
+            <div className="flex w-full max-w-md items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
               <Search className="h-4 w-4 text-gray-400" />
               <input
                 value={keyword}
-                onChange={(event) => setKeyword(event.target.value)}
+                onChange={(event) => {
+                  setKeyword(event.target.value);
+                  setCurrentPage(1);
+                }}
                 className="w-full bg-transparent text-sm outline-none"
                 placeholder="搜索成员姓名 / 异常类型"
               />
             </div>
-            <div className="flex flex-wrap gap-2">
-              {filters.map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => setActiveFilter(item)}
-                  className={`rounded-full px-4 py-2 text-sm font-medium transition ${activeFilter === item ? 'bg-gray-900 text-white' : 'bg-slate-100 text-gray-600 hover:bg-slate-200'}`}
-                >
-                  {item}
-                </button>
-              ))}
+          </div>
+
+          {actionMessage ? <p className="mt-3 text-sm text-blue-700">{actionMessage}</p> : null}
+        </section>
+
+        <section className="rounded-3xl border border-gray-200 bg-white shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="min-w-[1180px] table-fixed border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-left text-xs font-semibold text-slate-600">
+                  <th className="w-24 px-4 py-3">姓名</th>
+                  <th className="w-44 px-4 py-3">部门</th>
+                  <th className="w-28 px-4 py-3">异常类型</th>
+                  <th className="w-20 px-4 py-3">风险</th>
+                  <th className="w-28 px-4 py-3">日期</th>
+                  <th className="w-24 px-4 py-3">状态</th>
+                  <th className="px-4 py-3">异常详情</th>
+                  <th className="w-44 px-4 py-3">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentRows.length > 0 ? (
+                  currentRows.map((item, index) => (
+                    <tr key={buildKey(item)} className={`${index % 2 === 0 ? 'bg-white' : 'bg-rose-50/30'} border-t border-slate-100`}>
+                      <td className="px-4 py-3 text-sm font-semibold text-slate-900">{item.name}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{item.department}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{item.type}</td>
+                      <td className="px-4 py-3 text-sm">
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${item.urgent ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                          {item.urgent ? '高' : '低'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{item.date}</td>
+                      <td className="px-4 py-3 text-sm">
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${item.urgent ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                          {item.urgent ? '待处理' : '已闭环'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600">
+                        <p className="line-clamp-2">{item.detail}</p>
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        <div className="flex items-center gap-2">
+                          <Link
+                            to={item.actionTo}
+                            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                          >
+                            {item.actionText}
+                          </Link>
+                          {item.urgent ? (
+                            <button
+                              type="button"
+                              onClick={() => handleCloseLoop(item)}
+                              className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                            >
+                              标记闭环
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-14 text-center text-sm text-slate-400">当前筛选条件下暂无团队异常记录</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
+            <p>
+              显示第 <span className="font-semibold">{filteredRows.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1}</span> 到{' '}
+              <span className="font-semibold">{Math.min(safeCurrentPage * pageSize, filteredRows.length)}</span> 条，共{' '}
+              <span className="font-semibold">{filteredRows.length}</span> 条结果
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => setOnlyUrgent((current) => !current)}
-                className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${onlyUrgent ? 'border-red-200 bg-red-50 text-red-700' : 'border-gray-200 bg-white text-gray-600 hover:bg-slate-50'}`}
+                onClick={() => setCurrentPage((current) => Math.max(1, current - 1))}
+                disabled={safeCurrentPage <= 1}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <Filter className="h-4 w-4" />
-                {onlyUrgent ? '仅看高风险中' : '更多筛选'}
+                上一页
               </button>
-            </div>
-          </div>
-        </section>
-
-        <section className="space-y-3">
-          {filteredList.length > 0 ? (
-            filteredList.map((item) => (
-              <div key={`${item.name}-${item.type}-${item.date}`} className={`rounded-3xl border p-4 shadow-sm ${item.tone}`}>
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-base font-semibold">{item.name}</h3>
-                      <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-semibold">{item.type}</span>
-                      <span className="text-xs opacity-80">{item.date}</span>
-                    </div>
-                    <p className="mt-2 text-sm opacity-90">{item.department}</p>
-                    <p className="mt-3 text-sm leading-6 opacity-90">{item.detail}</p>
-                  </div>
-                  <Link
-                    to={item.actionTo}
-                    className="inline-flex items-center justify-center rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-gray-900 transition hover:-translate-y-0.5 hover:shadow-sm"
-                  >
-                    {item.actionText}
-                    <ArrowRight className="ml-1 h-4 w-4" />
-                  </Link>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="rounded-3xl border border-dashed border-slate-200 bg-white px-4 py-12 text-center text-sm text-slate-400 shadow-sm">
-              当前筛选条件下暂无团队异常记录
-            </div>
-          )}
-        </section>
-
-        <section className="grid gap-4 xl:grid-cols-2">
-          <div className="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-gray-900">
-              <CheckSquare className="h-5 w-5 text-amber-600" />
-              <h3 className="text-base font-semibold">处理建议</h3>
-            </div>
-            <div className="mt-4 space-y-3 text-sm text-gray-600">
-              <div className="rounded-2xl bg-slate-50 p-4">优先处理缺卡和已超 24 小时未审批的补卡，避免月底集中堆积。</div>
-              <div className="rounded-2xl bg-slate-50 p-4">如果异常由规则或排班导致，先去对应模块修正，再回来看成员明细。</div>
-              <div className="rounded-2xl bg-slate-50 p-4">建议主管先与员工确认情况，再执行审批或驳回动作。</div>
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-gray-900">
-              <Clock className="h-5 w-5 text-purple-600" />
-              <h3 className="text-base font-semibold">今日处理节奏</h3>
-            </div>
-            <div className="mt-4 space-y-3 text-sm text-gray-600">
-              <div className="flex items-start gap-3 rounded-2xl bg-slate-50 p-4">
-                <span className="mt-0.5 rounded-full bg-white px-2 py-1 text-xs font-semibold text-gray-700">10:30</span>
-                <p>先看工作台里的高风险异常和待审批数量。</p>
-              </div>
-              <div className="flex items-start gap-3 rounded-2xl bg-slate-50 p-4">
-                <span className="mt-0.5 rounded-full bg-white px-2 py-1 text-xs font-semibold text-gray-700">15:00</span>
-                <p>检查未排班成员，避免次日继续生成异常。</p>
-              </div>
-              <div className="flex items-start gap-3 rounded-2xl bg-slate-50 p-4">
-                <span className="mt-0.5 rounded-full bg-white px-2 py-1 text-xs font-semibold text-gray-700">18:00</span>
-                <p>确保高风险异常闭环，并回到工作台确认数量已下降。</p>
+              <span className="text-xs text-slate-500">第 {safeCurrentPage} / {totalPages} 页</span>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((current) => Math.min(totalPages, current + 1))}
+                disabled={safeCurrentPage >= totalPages}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                下一页
+              </button>
+              <div className="ml-1 inline-flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={totalPages}
+                  value={jumpPageInput}
+                  onChange={(event) => setJumpPageInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      handleJumpPage();
+                    }
+                  }}
+                  className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700 outline-none transition focus:border-blue-300"
+                  placeholder="页码"
+                />
+                <button
+                  type="button"
+                  onClick={handleJumpPage}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  跳转
+                </button>
               </div>
             </div>
           </div>
         </section>
-      </main>
+      </div>
     </>
   );
 }

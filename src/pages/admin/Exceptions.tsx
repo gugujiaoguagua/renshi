@@ -1,299 +1,362 @@
 import { useMemo, useState } from 'react';
-import { AlertCircle, ArrowRight, CheckSquare, Clock, Download, Filter, Search } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { AlertCircle, Download, RotateCcw, Search } from 'lucide-react';
+import MobileModalShell from '../../components/mobile/MobileModalShell';
+import { adminExceptionInsights } from '../../data/attendanceInsights';
 import { downloadCsv } from '../../utils/downloadCsv';
 
-const summaryCards = [
-  { label: '待处理异常', value: '12', tone: 'text-red-600' },
-  { label: '待审批补卡', value: '3', tone: 'text-amber-600' },
-  { label: '已超时未处理', value: '2', tone: 'text-rose-600' },
-  { label: '今日已闭环', value: '8', tone: 'text-emerald-600' },
-];
+type FilterType = '全部异常' | '高风险' | '待审批' | '待修正' | '已闭环';
+type StatusFilter = '全部状态' | '待处理' | '已闭环';
+type ExceptionRow = (typeof adminExceptionInsights.rows)[number];
 
-const initialExceptionRows = [
-  {
-    employee: '李四',
-    code: 'E002',
-    department: '运营部',
-    type: '迟到 + 缺卡',
-    status: '待复核',
-    risk: '高',
-    detail: '本月累计 2 次迟到、1 次缺卡，已影响月报结果，建议今天处理。',
-    tone: 'border-red-100 bg-red-50',
-  },
-  {
-    employee: '王五',
-    code: 'E003',
-    department: '市场部',
-    type: '补卡审批中',
-    status: '主管处理中',
-    risk: '中',
-    detail: '员工已提交下班缺卡说明，需要人事确认审批是否回写成功。',
-    tone: 'border-amber-100 bg-amber-50',
-  },
-  {
-    employee: '赵六',
-    code: 'E026',
-    department: '直营二店',
-    type: '未排班风险',
-    status: '待修正',
-    risk: '中',
-    detail: '本周仍有 1 天未排班，若不修正将继续产生异常并影响组织口径。',
-    tone: 'border-purple-100 bg-purple-50',
-  },
-];
+const quickFilterOptions: FilterType[] = ['全部异常', '高风险', '待审批', '待修正', '已闭环'];
 
-const actions = [
-  { title: '先处理高风险异常', desc: '优先看已影响计薪和月报结果的记录。', to: '/admin/exceptions' },
-  { title: '核对规则口径', desc: '确认异常是否由新规则生效导致。', to: '/admin/rules' },
-  { title: '查看操作留痕', desc: '若结果有争议，可回溯日志中心。', to: '/admin/logs' },
-];
-
-const filterOptions = ['全部', '高风险', '待审批', '待修正', '已闭环'] as const;
-type FilterType = (typeof filterOptions)[number];
+function buildClosedRow(row: ExceptionRow): ExceptionRow {
+  return {
+    ...row,
+    status: '已闭环',
+    risk: '低',
+    detail: `${row.detail} 当前已进入人事复核完成状态，并同步回写异常中心。`,
+    tone: 'border-emerald-100 bg-emerald-50',
+  };
+}
 
 export default function AdminExceptions() {
-  const [rows, setRows] = useState(initialExceptionRows);
+  const [rows, setRows] = useState<ExceptionRow[]>(adminExceptionInsights.rows);
+  const [monthFilter, setMonthFilter] = useState('全部月份');
+  const [departmentFilter, setDepartmentFilter] = useState('全部部门');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('全部状态');
+  const [quickFilter, setQuickFilter] = useState<FilterType>('全部异常');
   const [keyword, setKeyword] = useState('');
-  const [activeFilter, setActiveFilter] = useState<FilterType>('全部');
-  const [processingRow, setProcessingRow] = useState<(typeof initialExceptionRows)[number] | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [jumpPageInput, setJumpPageInput] = useState('');
   const [actionMessage, setActionMessage] = useState('');
+  const [detailRow, setDetailRow] = useState<ExceptionRow | null>(null);
+
+
+  const monthOptions = useMemo(() => {
+    return Array.from(new Set(rows.map((row) => row.date.slice(0, 7)))).sort((a, b) => (a < b ? 1 : -1));
+  }, [rows]);
+
+  const departmentOptions = useMemo(() => {
+    return Array.from(new Set(rows.map((row) => row.department))).sort();
+  }, [rows]);
 
   const filteredRows = useMemo(() => {
-    return rows.filter((item) => {
-      const matchKeyword = !keyword || [item.employee, item.code, item.department, item.type, item.detail].some((part) => part.includes(keyword));
-      const matchFilter =
-        activeFilter === '全部' ||
-        (activeFilter === '高风险' && item.risk === '高') ||
-        (activeFilter === '待审批' && item.status.includes('审批')) ||
-        (activeFilter === '待修正' && item.status.includes('修正')) ||
-        (activeFilter === '已闭环' && item.status === '已闭环');
-      return matchKeyword && matchFilter;
-    });
-  }, [activeFilter, keyword, rows]);
+    const keywordText = keyword.trim();
+
+    return rows
+      .filter((row) => monthFilter === '全部月份' || row.date.startsWith(monthFilter))
+      .filter((row) => departmentFilter === '全部部门' || row.department === departmentFilter)
+      .filter((row) => {
+        if (statusFilter === '全部状态') return true;
+        if (statusFilter === '已闭环') return row.status === '已闭环';
+        return row.status !== '已闭环';
+      })
+      .filter((row) => {
+        if (quickFilter === '全部异常') return true;
+        if (quickFilter === '高风险') return row.risk === '高';
+        if (quickFilter === '待审批') return row.status.includes('审批');
+        if (quickFilter === '待修正') return row.status.includes('修正') || row.status.includes('核实') || row.status.includes('复核');
+        return row.status === '已闭环';
+      })
+      .filter((row) => {
+        if (!keywordText) return true;
+        return [row.employee, row.code, row.department, row.type, row.detail, row.status].some((item) => item.includes(keywordText));
+      })
+      .sort((a, b) => {
+        if (a.risk !== b.risk) return a.risk === '高' ? -1 : 1;
+        return a.date < b.date ? 1 : -1;
+      });
+  }, [departmentFilter, keyword, monthFilter, quickFilter, rows, statusFilter]);
+
+  const pageSize = 10;
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const currentRows = filteredRows.slice((safeCurrentPage - 1) * pageSize, safeCurrentPage * pageSize);
+
+  const handleRecalculate = () => {
+    const keywordText = keyword.trim() ? ` / 关键词：${keyword.trim()}` : '';
+    setActionMessage(`已按 ${monthFilter} / ${departmentFilter} / ${statusFilter}${keywordText} 重新计算，共得到 ${filteredRows.length} 条异常记录。`);
+  };
 
   const handleExport = () => {
     downloadCsv(
-      '异常清单.csv',
-      ['姓名', '工号', '部门', '异常类型', '状态', '风险', '详情'],
-      filteredRows.map((item) => [item.employee, item.code, item.department, item.type, item.status, item.risk, item.detail]),
+      '人事异常中心-异常记录.csv',
+      ['姓名', '工号', '部门', '异常类型', '状态', '风险', '日期', '详情'],
+      filteredRows.map((row) => [row.employee, row.code, row.department, row.type, row.status, row.risk, row.date, row.detail]),
     );
     setActionMessage(`已导出 ${filteredRows.length} 条异常记录。`);
   };
 
-  const handleProcess = (row: (typeof initialExceptionRows)[number]) => {
-    setProcessingRow(row);
-    setRows((current) =>
-      current.map((item) =>
-        item.code === row.code
-          ? {
-              ...item,
-              status: '已闭环',
-              risk: '低',
-              detail: `${item.detail} 当前已进入人事复核完成状态，并同步回写异常中心 / 月报。`,
-              tone: 'border-emerald-100 bg-emerald-50',
-            }
-          : item,
-      ),
-    );
-    setActionMessage(`${row.employee} 的异常已进入处理完成状态，列表和导出口径已同步刷新。`);
+  const handleCloseLoop = (row: ExceptionRow) => {
+    const nextRow = buildClosedRow(row);
+    setRows((current) => current.map((item) => (item.code === row.code && item.type === row.type && item.date === row.date ? nextRow : item)));
+    setActionMessage(`${row.employee} 的异常已标记闭环，并同步刷新当前结果。`);
+  };
+
+  const handleJumpPage = () => {
+    const page = Number(jumpPageInput);
+    if (!Number.isFinite(page)) return;
+    const target = Math.min(totalPages, Math.max(1, Math.floor(page)));
+    setCurrentPage(target);
+    setJumpPageInput('');
   };
 
   return (
-    <div className="space-y-6">
-      {processingRow ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/35 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-2xl rounded-[28px] border border-white/70 bg-white p-5 shadow-[0_24px_60px_rgba(15,23,42,0.24)]">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium text-blue-600">异常处理结果</p>
-                <h2 className="mt-2 text-lg font-semibold text-slate-900">{processingRow.employee} · {processingRow.type}</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setProcessingRow(null)}
-                className="rounded-full border border-slate-200 px-3 py-1 text-sm text-slate-500 transition hover:bg-slate-50"
-              >
-                关闭
-              </button>
+
+    <div className="space-y-5">
+      {detailRow ? (
+        <MobileModalShell
+          icon={<AlertCircle className="h-5 w-5" />}
+          eyebrow="异常日明细"
+          title={`${detailRow.employee} · ${detailRow.type}`}
+          onClose={() => setDetailRow(null)}
+          panelClassName="max-w-2xl"
+        >
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+              <p className="font-semibold text-slate-900">异常详情</p>
+              <p className="mt-2 leading-6">{detailRow.detail}</p>
             </div>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                <p className="font-semibold text-slate-900">原始详情</p>
-                <p className="mt-2 leading-6">{processingRow.detail}</p>
-              </div>
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-900">
-                <p className="font-semibold">处理后状态</p>
-                <p className="mt-2 leading-6">已闭环，并已同步更新异常中心与月报口径。</p>
-              </div>
+            <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+              <p className="font-semibold">当前状态</p>
+              <p className="mt-2 leading-6">{detailRow.status} · 风险 {detailRow.risk}</p>
+              <p className="mt-2 leading-6">日期：{detailRow.date}</p>
+              <p className="mt-2 leading-6">部门：{detailRow.department}</p>
             </div>
           </div>
-        </div>
+        </MobileModalShell>
       ) : null}
 
-      <section className="rounded-[32px] bg-gradient-to-r from-red-600 via-rose-600 to-orange-500 p-6 text-white shadow-[0_20px_50px_rgba(244,63,94,0.22)]">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-2xl">
-            <p className="text-sm font-medium text-red-50">人事异常中心</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight">先清掉高风险异常，再回看月报</h1>
-            <p className="mt-3 text-sm leading-6 text-red-50/90">
-              这页承接工作台中的异常汇总入口，把迟到、缺卡、补卡审批和未排班风险放到一个统一处理面板里。
-            </p>
+      <section className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <h2 className="text-2xl font-semibold text-gray-900">异常筛选与结果</h2>
+            <p className="mt-2 text-sm text-gray-500">支持异常中心按月份、部门、状态筛选，搜索后可直接导出。</p>
           </div>
-          <div className="flex flex-wrap gap-3">
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="space-y-1 text-sm text-gray-500">
+              <span>月份</span>
+              <select
+                value={monthFilter}
+                onChange={(event) => {
+                  setMonthFilter(event.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-blue-300"
+              >
+                <option value="全部月份">全部月份</option>
+                {monthOptions.map((month) => (
+                  <option key={month} value={month}>{month}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1 text-sm text-gray-500">
+              <span>组织/部门</span>
+              <select
+                value={departmentFilter}
+                onChange={(event) => {
+                  setDepartmentFilter(event.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-blue-300"
+              >
+                <option value="全部部门">全部部门</option>
+                {departmentOptions.map((department) => (
+                  <option key={department} value={department}>{department}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1 text-sm text-gray-500">
+              <span>状态</span>
+              <select
+                value={statusFilter}
+                onChange={(event) => {
+                  setStatusFilter(event.target.value as StatusFilter);
+                  setCurrentPage(1);
+                }}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-blue-300"
+              >
+                <option value="全部状态">全部状态</option>
+                <option value="待处理">待处理</option>
+                <option value="已闭环">已闭环</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => setActiveFilter('高风险')}
-              className="inline-flex items-center rounded-2xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/15"
+              onClick={handleRecalculate}
+              className="inline-flex items-center rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
-              <Filter className="mr-2 h-4 w-4" />
-              批量筛选
+              <RotateCcw className="mr-2 h-4 w-4" />
+              重新计算
             </button>
             <button
               type="button"
               onClick={handleExport}
-              className="inline-flex items-center rounded-2xl bg-white px-4 py-2 text-sm font-medium text-slate-900 transition hover:bg-slate-100"
+              className="inline-flex items-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
             >
               <Download className="mr-2 h-4 w-4" />
-              导出异常清单
+              导出异常
             </button>
           </div>
-        </div>
-      </section>
 
-      {actionMessage ? (
-        <section className="rounded-3xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900 shadow-sm">
-          <p className="font-semibold">当前操作</p>
-          <p className="mt-2 leading-6">{actionMessage}</p>
-        </section>
-      ) : null}
-
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {summaryCards.map((item) => (
-          <div key={item.label} className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
-            <p className="text-sm font-medium text-gray-500">{item.label}</p>
-            <p className={`mt-4 text-3xl font-semibold ${item.tone}`}>{item.value}</p>
-          </div>
-        ))}
-      </section>
-
-      <section className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex flex-1 items-center gap-3 rounded-2xl border border-gray-200 bg-slate-50 px-4 py-3">
+          <div className="flex w-full max-w-md items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
             <Search className="h-4 w-4 text-gray-400" />
             <input
               value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
+              onChange={(event) => {
+                setKeyword(event.target.value);
+                setCurrentPage(1);
+              }}
               className="w-full bg-transparent text-sm outline-none"
-              placeholder="搜索姓名 / 工号 / 部门 / 异常类型"
+              placeholder="搜索人名 / 工号 / 异常类型"
             />
           </div>
-          <div className="flex flex-wrap gap-2 text-sm">
-            {filterOptions.map((item) => (
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {quickFilterOptions.map((item) => (
+            <button
+              key={item}
+              type="button"
+              onClick={() => {
+                setQuickFilter(item);
+                setCurrentPage(1);
+              }}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${quickFilter === item ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+
+        {actionMessage ? <p className="mt-3 text-sm text-blue-700">{actionMessage}</p> : null}
+      </section>
+
+      <section className="rounded-3xl border border-gray-200 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="min-w-[1160px] table-fixed border-collapse">
+            <thead>
+              <tr className="bg-slate-50 text-left text-xs font-semibold text-slate-600">
+                <th className="w-28 px-4 py-3">姓名</th>
+                <th className="w-24 px-4 py-3">工号</th>
+                <th className="w-40 px-4 py-3">部门</th>
+                <th className="w-32 px-4 py-3">异常类型</th>
+                <th className="w-28 px-4 py-3">状态</th>
+                <th className="w-20 px-4 py-3">风险</th>
+                <th className="w-28 px-4 py-3">日期</th>
+                <th className="px-4 py-3">异常详情</th>
+                <th className="w-40 px-4 py-3">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {currentRows.length > 0 ? (
+                currentRows.map((row, index) => (
+                  <tr key={`${row.code}-${row.type}-${row.date}-${index}`} className={`${index % 2 === 0 ? 'bg-white' : 'bg-rose-50/30'} border-t border-slate-100`}>
+                    <td className="px-4 py-3 text-sm font-semibold text-slate-900">{row.employee}</td>
+                    <td className="px-4 py-3 text-sm text-slate-700">{row.code}</td>
+                    <td className="px-4 py-3 text-sm text-slate-700">{row.department}</td>
+                    <td className="px-4 py-3 text-sm text-slate-700">{row.type}</td>
+                    <td className="px-4 py-3 text-sm">
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.status === '已闭环' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {row.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.risk === '高' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                        {row.risk}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-700">{row.date}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">
+                      <p className="line-clamp-2">{row.detail}</p>
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDetailRow(row)}
+                          className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                        >
+                          日明细
+                        </button>
+                        {row.status !== '已闭环' ? (
+                          <button
+                            type="button"
+                            onClick={() => handleCloseLoop(row)}
+                            className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                          >
+                            标记闭环
+                          </button>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={9} className="px-4 py-14 text-center text-sm text-slate-400">当前筛选条件下暂无异常记录</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
+          <p>
+            显示第 <span className="font-semibold">{filteredRows.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1}</span> 到{' '}
+            <span className="font-semibold">{Math.min(safeCurrentPage * pageSize, filteredRows.length)}</span> 条，共{' '}
+            <span className="font-semibold">{filteredRows.length}</span> 条结果
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCurrentPage((current) => Math.max(1, current - 1))}
+              disabled={safeCurrentPage <= 1}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              上一页
+            </button>
+            <span className="text-xs text-slate-500">第 {safeCurrentPage} / {totalPages} 页</span>
+            <button
+              type="button"
+              onClick={() => setCurrentPage((current) => Math.min(totalPages, current + 1))}
+              disabled={safeCurrentPage >= totalPages}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              下一页
+            </button>
+            <div className="ml-1 inline-flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                max={totalPages}
+                value={jumpPageInput}
+                onChange={(event) => setJumpPageInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    handleJumpPage();
+                  }
+                }}
+                className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-700 outline-none transition focus:border-blue-300"
+                placeholder="页码"
+              />
               <button
-                key={item}
                 type="button"
-                onClick={() => setActiveFilter(item)}
-                className={`rounded-full px-4 py-2 font-medium transition ${activeFilter === item ? 'bg-gray-900 text-white' : 'bg-slate-100 text-gray-600 hover:bg-slate-200'}`}
+                onClick={handleJumpPage}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
               >
-                {item}
+                跳转
               </button>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="grid gap-3 md:grid-cols-3">
-        {[
-          { title: '待确认回写', value: '2 条', desc: '主管已处理，但人事侧还需确认异常和月报是否一致。', tone: 'border-blue-100 bg-blue-50' },
-          { title: '待补日志', value: '1 条', desc: '人工修正已完成，但还缺最终修正原因和导出留痕。', tone: 'border-amber-100 bg-amber-50' },
-          { title: '待核规则来源', value: '1 条', desc: '异常可能由新规则生效触发，建议先核规则版本再决定是否修正。', tone: 'border-red-100 bg-red-50' },
-        ].map((item) => (
-          <div key={item.title} className={`rounded-3xl border p-4 shadow-sm ${item.tone}`}>
-            <p className="text-sm text-gray-500">{item.title}</p>
-            <p className="mt-2 text-2xl font-semibold text-gray-900">{item.value}</p>
-            <p className="mt-2 text-sm leading-6 text-gray-600">{item.desc}</p>
-          </div>
-        ))}
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="space-y-3">
-          {filteredRows.length > 0 ? (
-            filteredRows.map((item) => (
-              <div key={`${item.employee}-${item.type}`} className={`rounded-3xl border p-5 shadow-sm ${item.tone}`}>
-                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-lg font-semibold text-gray-900">{item.employee}</h2>
-                      <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-600">{item.code}</span>
-                      <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-600">{item.type}</span>
-                    </div>
-                    <p className="mt-2 text-sm text-gray-500">{item.department} · 风险等级 {item.risk}</p>
-                    <p className="mt-3 text-sm leading-6 text-gray-700">{item.detail}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <span className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-gray-700">{item.status}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleProcess(item)}
-                      className="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-gray-900 transition hover:-translate-y-0.5 hover:shadow-sm"
-                    >
-                      立即处理
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="rounded-3xl border border-dashed border-slate-200 bg-white px-4 py-12 text-center text-sm text-slate-400 shadow-sm">
-              当前筛选条件下暂无异常记录
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-6">
-          <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-red-500" />
-              <h3 className="text-lg font-semibold text-gray-900">处理建议</h3>
-            </div>
-            <div className="mt-4 space-y-3 text-sm text-gray-600">
-              <div className="rounded-2xl bg-slate-50 p-4">先处理已经影响计薪的异常，再看等待主管审批或待排班修正的记录。</div>
-              <div className="rounded-2xl bg-slate-50 p-4">如果异常来自规则变更，建议同步检查日志中心和规则版本说明。</div>
-              <div className="rounded-2xl bg-slate-50 p-4">对同部门连续异常，优先检查是否存在排班或组织口径问题。</div>
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-blue-600" />
-              <h3 className="text-lg font-semibold text-gray-900">关联动作</h3>
-            </div>
-            <div className="mt-4 space-y-3">
-              {actions.map((item) => (
-                <Link key={item.title} to={item.to} className="group block rounded-2xl bg-slate-50 p-4 transition hover:bg-blue-50">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">{item.title}</p>
-                      <p className="mt-1 text-sm leading-6 text-gray-500">{item.desc}</p>
-                    </div>
-                    <ArrowRight className="mt-1 h-4 w-4 text-blue-600 transition group-hover:translate-x-0.5" />
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5 shadow-sm">
-            <div className="flex items-start gap-3">
-              <CheckSquare className="mt-0.5 h-5 w-5 text-emerald-600" />
-              <div>
-                <h3 className="text-sm font-semibold text-emerald-900">已接入首页闭环</h3>
-                <p className="mt-1 text-sm leading-6 text-emerald-800">
-                  现在可以从人事工作台的“异常中心”入口直接进入这页，再继续跳转到规则和日志相关页面。
-                </p>
-              </div>
             </div>
           </div>
         </div>

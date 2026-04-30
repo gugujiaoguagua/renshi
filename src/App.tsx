@@ -16,7 +16,6 @@ import AdminDashboard from './pages/admin/Dashboard';
 import AdminExceptions from './pages/admin/Exceptions';
 import AdminSchedule from './pages/admin/Schedule';
 import RecordsPage from './pages/shared/Records';
-import ProfilePage from './pages/shared/Profile';
 import OrganizationPage from './pages/shared/Organization';
 import RulesPage from './pages/shared/Rules';
 import LogsPage from './pages/shared/Logs';
@@ -123,17 +122,16 @@ function App() {
           <Route path="exceptions" element={<EmployeeExceptions />} />
           <Route path="apply" element={<EmployeeApply />} />
           <Route path="monthly-summary" element={<EmployeeMonthlySummary />} />
-          <Route path="profile" element={<ProfilePage variant="employee" />} />
         </Route>
 
         <Route path="/manager" element={<ManagerLayout />}>
           <Route index element={<Navigate to="team" replace />} />
           <Route path="team" element={<ManagerTeam />} />
+          <Route path="records" element={<RecordsPage variant="manager" />} />
           <Route path="team-exceptions" element={<ManagerTeamExceptions />} />
           <Route path="schedule" element={<ManagerSchedule />} />
           <Route path="approval" element={<ManagerApproval />} />
           <Route path="monthly-report" element={<ManagerMonthlyReport />} />
-          <Route path="profile" element={<ProfilePage variant="manager" />} />
         </Route>
 
         <Route path="/admin" element={<AdminLayout />}>
@@ -141,11 +139,13 @@ function App() {
           <Route path="overview" element={<AdminDashboard />} />
           <Route path="organization" element={<OrganizationPage />} />
           <Route path="rules" element={<RulesPage />} />
+          <Route path="records" element={<RecordsPage variant="admin" />} />
           <Route path="schedule" element={<AdminSchedule />} />
           <Route path="exceptions" element={<AdminExceptions />} />
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="logs" element={<LogsPage />} />
         </Route>
+
 
 
         <Route path="*" element={<Navigate to="/" replace />} />

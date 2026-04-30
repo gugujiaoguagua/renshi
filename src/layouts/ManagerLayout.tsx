@@ -1,5 +1,6 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Users, Calendar, CheckSquare, User, AlertTriangle } from 'lucide-react';
+import { Users, Calendar, CheckSquare, Clock3, AlertTriangle, FileText } from 'lucide-react';
+
 import { clsx } from 'clsx';
 import RoleSwitchMenu from '../components/RoleSwitchMenu';
 
@@ -13,13 +14,22 @@ type NavItem = {
   matches?: string[];
 };
 
-const navItems: NavItem[] = [
+const mobileNavItems: NavItem[] = [
   { name: '主管工作台', mobileName: '工作台', path: '/manager/team', icon: Users, desc: '优先处理团队异常、待审批与月报跟进', matches: ['/manager/team-exceptions', '/manager/monthly-report'] },
-
+  { name: '打卡记录', mobileName: '记录', path: '/manager/records', icon: Clock3, desc: '按日历查看主管本人每日打卡与异常结果' },
   { name: '排班管理', mobileName: '排班', path: '/manager/schedule', icon: Calendar, desc: '查看未排班与下周班次安排' },
   { name: '待审批中心', mobileName: '审批', path: '/manager/approval', icon: CheckSquare, desc: '先处理补卡与异常审批', badge: '3' },
-  { name: '个人中心', mobileName: '我的', path: '/manager/profile', icon: User, desc: '查看主管个人信息与设置' },
 ];
+
+const desktopNavItems: NavItem[] = [
+  { name: '主管工作台', mobileName: '工作台', path: '/manager/team', icon: Users, desc: '优先处理团队异常、待审批与月报跟进' },
+  { name: '打卡记录', mobileName: '记录', path: '/manager/records', icon: Clock3, desc: '按日历查看主管本人每日打卡与异常结果' },
+  { name: '排班管理', mobileName: '排班', path: '/manager/schedule', icon: Calendar, desc: '查看未排班与下周班次安排' },
+  { name: '团队异常明细', mobileName: '异常', path: '/manager/team-exceptions', icon: AlertTriangle, desc: '逐条处理团队异常并跟进进度' },
+  { name: '团队月报', mobileName: '月报', path: '/manager/monthly-report', icon: FileText, desc: '查看团队月报状态与处理结果' },
+  { name: '待审批中心', mobileName: '审批', path: '/manager/approval', icon: CheckSquare, desc: '先处理补卡与异常审批', badge: '3' },
+];
+
 
 export default function ManagerLayout() {
   const location = useLocation();
@@ -31,7 +41,7 @@ export default function ManagerLayout() {
         <Outlet />
 
         <nav className="fixed bottom-0 left-1/2 z-50 flex w-full max-w-[414px] -translate-x-1/2 items-center justify-around border-t border-gray-200 bg-white/95 py-2 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur">
-          {navItems.map((item) => {
+          {mobileNavItems.map((item) => {
             const active = isActivePath(item);
             return (
               <Link
@@ -60,7 +70,7 @@ export default function ManagerLayout() {
           <RoleSwitchMenu currentRole="manager" />
 
           <nav className="mt-6 space-y-2">
-            {navItems.map((item) => {
+            {desktopNavItems.map((item) => {
               const active = isActivePath(item);
               return (
                 <Link
@@ -87,15 +97,6 @@ export default function ManagerLayout() {
               );
             })}
           </nav>
-
-          <div className="mt-auto rounded-3xl bg-indigo-600 p-4 text-white shadow-[0_18px_40px_rgba(79,70,229,0.22)]">
-            <div className="flex items-center gap-2 text-indigo-100">
-              <AlertTriangle className="h-4 w-4" />
-              <span className="text-xs uppercase tracking-[0.24em]">当前焦点</span>
-            </div>
-            <h3 className="mt-3 text-lg font-semibold">先把团队异常清掉</h3>
-            <p className="mt-2 text-sm leading-6 text-indigo-100">今天有 5 条团队异常、3 条待审批，建议先处理异常，再去补齐排班。</p>
-          </div>
         </aside>
 
         <main className="min-w-0 flex-1 overflow-y-auto bg-slate-100">
